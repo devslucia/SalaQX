@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ESTADO_BORDER_COLORS, type Turno, type Quirofano, type EstadoTurno } from "@/lib/types";
 import { formatDateTime, cn } from "@/lib/utils";
+import { notify } from "@/lib/notify-client";
 import {
   ArrowLeft, CheckCircle, XCircle, Pause, Trash2, Pencil, User, Phone, Clock, Building2,
   Stethoscope, Syringe, Heart, Hash, FileText,
@@ -86,12 +87,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
 
       if (error) throw error;
 
-      await supabase.from("notificaciones").insert({
-        turno_id: turno.id,
-        destinatario_id: turno.medico_id,
-        tipo: "turno_confirmado",
-        canal: "email",
-      });
+      void notify("turno-confirmado", { turno_id: turno.id });
 
       toast.success("Turno confirmado", {
         description: "Se notificó al médico por email",
@@ -108,19 +104,15 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
     if (!motivoRechazo.trim() || !turno) return;
     setActionLoading(true);
     try {
+      const motivo = motivoRechazo.trim();
       const { error } = await supabase
         .from("turnos")
-        .update({ estado: "rechazada", motivo_rechazo: motivoRechazo })
+        .update({ estado: "rechazada", motivo_rechazo: motivo })
         .eq("id", turno.id);
 
       if (error) throw error;
 
-      await supabase.from("notificaciones").insert({
-        turno_id: turno.id,
-        destinatario_id: turno.medico_id,
-        tipo: "turno_rechazado",
-        canal: "email",
-      });
+      void notify("turno-rechazado", { turno_id: turno.id, motivo });
 
       toast.success("Turno rechazado", { description: "Se notificó al médico con el motivo" });
       setRejectDialogOpen(false);
@@ -137,12 +129,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
     setActionLoading(true);
     try {
       await supabase.from("turnos").update({ estado: "suspendida" }).eq("id", turno.id);
-      await supabase.from("notificaciones").insert({
-        turno_id: turno.id,
-        destinatario_id: turno.medico_id,
-        tipo: "cirugia_suspendida",
-        canal: "email",
-      });
+      void notify("cirugia-suspendida", { turno_id: turno.id });
       toast.success("Cirugía suspendida");
       fetchTurno();
     } catch (e: any) {
@@ -172,17 +159,27 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
       const fechaHora = new Date(`${editForm.fecha}T${editForm.hora}:00`);
       const duracionTotal = parseInt(editForm.duracion_horas) * 60 + parseInt(editForm.duracion_minutos);
 
+      const cambios: string[] = [];
+      const fechaAnterior = new Date(turno.fecha_hora);
+      if (fechaAnterior.toISOString() !== fechaHora.toISOString()) {
+        cambios.push(
+          `Fecha y hora: de ${fechaAnterior.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })} a ${fechaHora.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`,
+        );
+      }
+      if (turno.duracion_minutos !== duracionTotal) {
+        const fmt = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m`;
+        cambios.push(`Duración: de ${fmt(turno.duracion_minutos)} a ${fmt(duracionTotal)}`);
+      }
+      if (cambios.length === 0) {
+        cambios.push("Datos actualizados");
+      }
+
       await supabase.from("turnos").update({
         fecha_hora: fechaHora.toISOString(),
         duracion_minutos: duracionTotal,
       }).eq("id", turno.id);
 
-      await supabase.from("notificaciones").insert({
-        turno_id: turno.id,
-        destinatario_id: turno.medico_id,
-        tipo: "cirugia_editada",
-        canal: "email",
-      });
+      void notify("cirugia-editada", { turno_id: turno.id, cambios });
 
       toast.success("Turno actualizado");
       setEditDialogOpen(false);

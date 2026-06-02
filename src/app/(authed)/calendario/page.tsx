@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { notify } from "@/lib/notify-client";
 import { toast } from "sonner";
 import {
   CalendarDays, CheckCircle2, Pencil, Pause, Trash2, Lock, X, ChevronDown,
@@ -288,6 +289,7 @@ export default function CalendarioPage() {
     if (!ok) return;
     const { error } = await supabase.from("turnos").update({ estado: "suspendida" }).eq("id", detail.id);
     if (error) { toast.error("Error al suspender"); return; }
+    void notify("cirugia-suspendida", { turno_id: detail.id });
     toast.success("Cirugía suspendida");
     setDetailId(null);
     refreshTurnos();

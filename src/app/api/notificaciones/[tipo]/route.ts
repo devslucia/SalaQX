@@ -1,0 +1,132 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  sendNuevaSolicitud,
+  sendTurnoConfirmado,
+  sendTurnoRechazado,
+  sendRecordatorio24hs,
+  sendCirugiaEditada,
+  sendCirugiaSuspendida,
+  type NotificationTipo,
+  isResendConfigured,
+} from "@/lib/resend";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+interface RouteParams {
+  params: Promise<{ tipo: string }>;
+}
+
+const VALID_TIPOS: NotificationTipo[] = [
+  "nueva_solicitud",
+  "confirmacion",
+  "rechazo",
+  "recordatorio",
+  "edicion",
+  "suspension",
+];
+
+function normalizarTipo(t: string): NotificationTipo | null {
+  const map: Record<string, NotificationTipo> = {
+    "nueva-solicitud": "nueva_solicitud",
+    "nueva_solicitud": "nueva_solicitud",
+    "turno-confirmado": "confirmacion",
+    "confirmacion": "confirmacion",
+    "turno-rechazado": "rechazo",
+    "rechazo": "rechazo",
+    "recordatorio": "recordatorio",
+    "recordatorio-24hs": "recordatorio",
+    "cirugia-editada": "edicion",
+    "edicion": "edicion",
+    "cirugia-suspendida": "suspension",
+    "suspension": "suspension",
+  };
+  const out = map[t];
+  return VALID_TIPOS.includes(out) ? out : null;
+}
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  const { tipo } = await params;
+  const tipoNorm = normalizarTipo(tipo);
+  if (!tipoNorm) {
+    return NextResponse.json(
+      { error: `Tipo de notificación inválido: ${tipo}` },
+      { status: 400 },
+    );
+  }
+
+  let body: { turno_id?: string; motivo?: string; cambios?: string[] };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
+  }
+
+  const { turno_id, motivo, cambios } = body;
+  if (!turno_id) {
+    return NextResponse.json({ error: "turno_id es requerido" }, { status: 400 });
+  }
+
+  if (!isResendConfigured()) {
+    console.warn(`[notificaciones] RESEND_API_KEY no configurada, omitiendo ${tipoNorm}`);
+    return NextResponse.json(
+      {
+        ok: false,
+        skipped: true,
+        reason: "RESEND_API_KEY no configurada",
+      },
+      { status: 202 },
+    );
+  }
+
+  try {
+    let result;
+    switch (tipoNorm) {
+      case "nueva_solicitud":
+        result = await sendNuevaSolicitud(turno_id);
+        break;
+      case "confirmacion":
+        result = await sendTurnoConfirmado(turno_id);
+        break;
+      case "rechazo":
+        result = await sendTurnoRechazado(turno_id, motivo ?? "Sin motivo especificado");
+        break;
+      case "recordatorio":
+        result = await sendRecordatorio24hs(turno_id);
+        break;
+      case "edicion":
+        result = await sendCirugiaEditada(turno_id, cambios ?? []);
+        break;
+      case "suspension":
+        result = await sendCirugiaSuspendida(turno_id);
+        break;
+    }
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error ?? "send failed" },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      tipo: tipoNorm,
+      recipients: result.recipients,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[notificaciones] error en ${tipoNorm}:`, err);
+    return NextResponse.json(
+      { ok: false, error: message },
+      { status: 500 },
+    );
+  }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { tipos: VALID_TIPOS, message: "Use POST con { turno_id, ... }" },
+    { status: 200 },
+  );
+}

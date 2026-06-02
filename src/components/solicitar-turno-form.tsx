@@ -24,6 +24,7 @@ import {
 import { format, getDay, parseISO, isBefore, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { notify } from "@/lib/notify-client";
 
 interface SolicitarTurnoFormProps {
   user: AuthUser;
@@ -183,6 +184,9 @@ export function SolicitarTurnoForm({
       toast.success("¡Turno solicitado!", {
         description: "Recibirás una notificación cuando sea revisado",
       });
+      if (data?.id) {
+        void notify("nueva-solicitud", { turno_id: data.id });
+      }
       onSuccess?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
