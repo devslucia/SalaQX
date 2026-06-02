@@ -149,35 +149,49 @@ export function SolicitarTurnoForm({
     }
 
     setSubmitting(true);
+    setError("");
 
-    const { error: insertError } = await supabase.from("turnos").insert({
-      medico_id: user.id,
-      paciente_nombre: form.paciente_nombre,
-      paciente_dni: form.paciente_dni,
-      paciente_edad: parseInt(form.paciente_edad),
-      obra_social_id: form.obra_social_id,
-      tipo_cirugia: form.tipo_cirugia,
-      tipo_anestesia_id: form.tipo_anestesia_id,
-      medico_telefono: form.medico_telefono || null,
-      usa_idi: form.usa_idi,
-      pasa_uti: form.pasa_uti,
-      duracion_minutos: duracionTotal,
-      fecha_hora: fechaHora.toISOString(),
-      estado: "pendiente",
-    });
+    try {
+      const { data, error: insertError } = await supabase
+        .from("turnos")
+        .insert({
+          medico_id: user.id,
+          paciente_nombre: form.paciente_nombre,
+          paciente_dni: form.paciente_dni,
+          paciente_edad: parseInt(form.paciente_edad),
+          obra_social_id: form.obra_social_id,
+          tipo_cirugia: form.tipo_cirugia,
+          tipo_anestesia_id: form.tipo_anestesia_id,
+          medico_telefono: form.medico_telefono || null,
+          usa_idi: form.usa_idi,
+          pasa_uti: form.pasa_uti,
+          duracion_minutos: duracionTotal,
+          fecha_hora: fechaHora.toISOString(),
+          estado: "pendiente",
+        })
+        .select()
+        .single();
 
-    if (insertError) {
-      setError(insertError.message);
-      toast.error("Error al solicitar el turno", { description: insertError.message });
+      if (insertError) {
+        console.error("[SolicitarTurnoForm] supabase error:", insertError);
+        setError(insertError.message);
+        toast.error("Error al solicitar el turno", { description: insertError.message });
+        return;
+      }
+
+      console.log("[SolicitarTurnoForm] turno creado:", data);
+      toast.success("¡Turno solicitado!", {
+        description: "Recibirás una notificación cuando sea revisado",
+      });
+      onSuccess?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[SolicitarTurnoForm] unexpected throw:", err);
+      setError(message);
+      toast.error("Error inesperado", { description: message });
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    toast.success("¡Turno solicitado!", {
-      description: "Recibirás una notificación cuando sea revisado",
-    });
-    setSubmitting(false);
-    onSuccess?.();
   };
 
   if (loading) {
