@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --font-sans: var(--font-inter);
+  --radius: 0.75rem;
+}
+
+:root {
+  --background: #F4F6F7;
+  --foreground: #1C2833;
+  --primary: #1B4F72;
+  --primary-foreground: #FFFFFF;
+  --secondary: #AED6F1;
+  --secondary-foreground: #1B4F72;
+  --muted: #E8ECEF;
+  --muted-foreground: #5D6D7E;
+  --accent: #AED6F1;
+  --accent-foreground: #1B4F72;
+  --destructive: #C0392B;
+  --destructive-foreground: #FFFFFF;
+  --success: #1E8449;
+  --success-foreground: #FFFFFF;
+  --warning: #D4AC0D;
+  --warning-foreground: #1C2833;
+  --border: #D5DBDB;
+  --input: #D5DBDB;
+  --ring: #1B4F72;
+  --card: #FFFFFF;
+  --card-foreground: #1C2833;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C2833;
+
+  /* Sidebar */
+  --sidebar: #1B4F72;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-muted: #E8F4FD;
+  --sidebar-active: #AED6F1;
+  --sidebar-active-foreground: #1B4F72;
+  --sidebar-hover: rgba(174, 214, 241, 0.12);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+}
+
+.dark {
+  --background: #0D1117;
+  --foreground: #E6EDF3;
+  --primary: #58A6FF;
+  --primary-foreground: #0D1117;
+  --secondary: #1F6FEB;
+  --secondary-foreground: #E6EDF3;
+  --muted: #161B22;
+  --muted-foreground: #8B949E;
+  --accent: #1F6FEB;
+  --accent-foreground: #E6EDF3;
+  --destructive: #F85149;
+  --destructive-foreground: #FFFFFF;
+  --success: #3FB950;
+  --success-foreground: #0D1117;
+  --warning: #D29922;
+  --warning-foreground: #0D1117;
+  --border: #21262D;
+  --input: #1C2128;
+  --ring: #58A6FF;
+  --card: #161B22;
+  --card-foreground: #E6EDF3;
+  --popover: #161B22;
+  --popover-foreground: #E6EDF3;
+
+  /* Sidebar dark */
+  --sidebar: #161B22;
+  --sidebar-foreground: #E6EDF3;
+  --sidebar-muted: #8B949E;
+  --sidebar-active: #1F6FEB;
+  --sidebar-active-foreground: #FFFFFF;
+  --sidebar-hover: rgba(88, 166, 255, 0.08);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html, body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoom-in-95 {
+  from { transform: scale(0.95); }
+  to { transform: scale(1); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-in {
+  animation: fade-in 0.15s ease-out, zoom-in-95 0.15s ease-out;
+}
+
+.animate-spin-slow {
+  animation: spin 1.2s linear infinite;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid var(--muted);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Subtle hospital-grade card shadow */
+.shadow-card {
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.04),
+    0 4px 12px -2px rgb(0 0 0 / 0.06);
+}
+
+.dark .shadow-card {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.04),
+    0 4px 12px -2px rgba(0, 0, 0, 0.4);
+}
