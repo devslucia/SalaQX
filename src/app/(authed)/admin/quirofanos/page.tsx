@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Pencil, Power, Building2 } from "lucide-react";
 import type { Quirofano } from "@/lib/types";
+import { QUIROFANO_COLOR_PALETTE } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { PageHeader } from "@/components/page-header";
@@ -59,7 +60,13 @@ export default function QuirofanosPage() {
         if (error) throw error;
         toast.success("Quirófano actualizado");
       } else {
-        const { error } = await supabase.from("quirofanos").insert({ nombre: form.nombre });
+        const nextColor =
+          QUIROFANO_COLOR_PALETTE[
+            quirofanos.length % QUIROFANO_COLOR_PALETTE.length
+          ];
+        const { error } = await supabase
+          .from("quirofanos")
+          .insert({ nombre: form.nombre, color: nextColor });
         if (error) throw error;
         toast.success("Quirófano creado", { description: form.nombre });
       }
@@ -125,6 +132,11 @@ export default function QuirofanosPage() {
                   <TableRow key={q.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white shadow-sm"
+                          style={{ backgroundColor: q.color }}
+                          aria-hidden
+                        />
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                           <Building2 size={16} />
                         </div>

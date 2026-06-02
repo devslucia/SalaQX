@@ -22,6 +22,7 @@ export interface User {
 export interface Quirofano {
   id: string;
   nombre: string;
+  color: string;
   activo: boolean;
   created_at: string;
 }
@@ -113,3 +114,28 @@ export const ESTADO_BORDER_COLORS: Record<EstadoTurno, string> = {
   suspendida: "border-l-muted-foreground",
   eliminada: "border-l-muted-foreground",
 };
+
+export const QUIROFANO_COLOR_PALETTE = [
+  "#1B4F72",
+  "#1E8449",
+  "#9B59B6",
+  "#E67E22",
+  "#16A085",
+  "#C0392B",
+  "#2980B9",
+  "#D35400",
+] as const;
+
+export interface TurnoCalendarEvent {
+  id: string;
+  fecha_hora: string;
+  duracion_minutos: number;
+  tipo_cirugia: string;
+  estado: EstadoTurno;
+  paciente_nombre: string | null;
+  medico_id: string;
+  medico_nombre: string | null;
+  quirofano_id: string | null;
+  quirofano_nombre: string | null;
+  quirofano_color: string | null;
+}

@@ -188,3 +188,223 @@ body {
     0 1px 0 0 rgba(255, 255, 255, 0.04),
     0 4px 12px -2px rgba(0, 0, 0, 0.4);
 }
+
+/* ============================================
+   FullCalendar overrides — light + dark
+   ============================================ */
+
+.calendario-wrapper .fc {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--card);
+  --fc-neutral-bg-color: var(--muted);
+  --fc-today-bg-color: rgba(174, 214, 241, 0.35);
+  --fc-now-indicator-color: var(--destructive);
+  --fc-event-text-color: #ffffff;
+  --fc-button-bg-color: var(--card);
+  --fc-button-border-color: var(--border);
+  --fc-button-text-color: var(--foreground);
+  --fc-button-hover-bg-color: var(--accent);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease;
+}
+
+/* Toolbar / header */
+.calendario-wrapper .fc-toolbar {
+  padding: 1rem 1.25rem 0.75rem;
+  gap: 0.75rem;
+}
+.calendario-wrapper .fc-toolbar.fc-header-toolbar {
+  margin-bottom: 0.75rem;
+}
+.calendario-wrapper .fc-toolbar-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+.calendario-wrapper .fc-button {
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.45rem 0.85rem;
+  text-transform: capitalize;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  transition: all 150ms ease;
+}
+.calendario-wrapper .fc-button:hover {
+  box-shadow: 0 2px 4px -1px rgb(0 0 0 / 0.08);
+}
+.calendario-wrapper .fc-button-primary:not(:disabled).fc-button-active,
+.calendario-wrapper .fc-button-primary:not(:disabled):active {
+  color: var(--primary-foreground);
+}
+
+/* Day headers */
+.calendario-wrapper .fc-col-header-cell {
+  background: #1B4F72;
+  color: #ffffff;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.6875rem;
+  padding: 0.6rem 0;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.calendario-wrapper .fc-col-header-cell-cushion {
+  color: #ffffff !important;
+  text-decoration: none !important;
+  padding: 0.25rem 0.5rem;
+}
+.calendario-wrapper .fc-scrollgrid {
+  border-radius: 0 0 0.75rem 0.75rem;
+  overflow: hidden;
+  border-color: var(--border);
+}
+
+/* Time grid */
+.calendario-wrapper .fc-timegrid-axis-cushion,
+.calendario-wrapper .fc-timegrid-slot-label-cushion {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+.calendario-wrapper .fc-timegrid-slot {
+  height: 2.25rem;
+  background: var(--card);
+}
+.calendario-wrapper .fc-timegrid-slot-minor {
+  border-top-style: none;
+}
+.calendario-wrapper .fc-timegrid-now-indicator-line {
+  border-color: var(--destructive);
+  border-width: 2px;
+}
+
+/* Today highlight */
+.calendario-wrapper .fc-day-today {
+  background: rgba(174, 214, 241, 0.35) !important;
+}
+.calendario-wrapper .fc-timegrid-col.fc-day-today {
+  background: rgba(174, 214, 241, 0.2) !important;
+}
+
+/* Events */
+.calendario-wrapper .fc-event {
+  border-radius: 0.5rem;
+  border: 0;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+  padding: 0;
+  cursor: pointer;
+  transition: filter 150ms ease, transform 100ms ease;
+  overflow: hidden;
+}
+.calendario-wrapper .fc-event:hover {
+  filter: brightness(0.92);
+}
+.calendario-wrapper .fc-event-locked {
+  cursor: default !important;
+  filter: saturate(0.6);
+}
+.calendario-wrapper .fc-event-locked:hover {
+  filter: saturate(0.65);
+}
+.calendario-wrapper .fc-event-title,
+.calendario-wrapper .fc-event-time {
+  display: none;
+}
+.calendario-wrapper .fc-event-main {
+  padding: 0;
+}
+.calendario-wrapper .fc-daygrid-event {
+  margin: 1px 2px;
+}
+
+/* Day grid (month view) */
+.calendario-wrapper .fc-daygrid-day-number {
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.5rem;
+}
+.calendario-wrapper .fc-day-other .fc-daygrid-day-number {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* Medico-only slot hover (green glow) */
+.calendario-wrapper.medico-can-create .fc-timegrid-slot:hover {
+  background: rgba(30, 132, 73, 0.1);
+  cursor: pointer;
+}
+
+/* ============================================
+   FullCalendar — dark mode
+   ============================================ */
+.dark .calendario-wrapper .fc {
+  --fc-border-color: #21262D;
+  --fc-page-bg-color: #161B22;
+  --fc-neutral-bg-color: #0D1117;
+  --fc-today-bg-color: rgba(31, 111, 235, 0.18);
+  color: #E6EDF3;
+}
+.dark .calendario-wrapper .fc-toolbar-title {
+  color: #E6EDF3;
+}
+.dark .calendario-wrapper .fc-col-header-cell {
+  background: #161B22;
+  color: #8B949E;
+  border-color: #21262D;
+}
+.dark .calendario-wrapper .fc-col-header-cell-cushion {
+  color: #E6EDF3 !important;
+}
+.dark .calendario-wrapper .fc-timegrid-axis-cushion,
+.dark .calendario-wrapper .fc-timegrid-slot-label-cushion {
+  color: #8B949E;
+}
+.dark .calendario-wrapper .fc-timegrid-slot {
+  background: #0D1117;
+  border-color: #21262D;
+}
+.dark .calendario-wrapper .fc-timegrid-slot-minor {
+  border-color: rgba(33, 38, 45, 0.5);
+}
+.dark .calendario-wrapper .fc-day-today {
+  background: rgba(31, 111, 235, 0.15) !important;
+}
+.dark .calendario-wrapper .fc-timegrid-col.fc-day-today {
+  background: rgba(31, 111, 235, 0.08) !important;
+}
+.dark .calendario-wrapper .fc-button {
+  background: #161B22;
+  border-color: #21262D;
+  color: #E6EDF3;
+}
+.dark .calendario-wrapper .fc-button:hover {
+  background: #1F2937;
+  border-color: #30363D;
+}
+.dark .calendario-wrapper .fc-button-primary:not(:disabled).fc-button-active,
+.dark .calendario-wrapper .fc-button-primary:not(:disabled):active {
+  background: #1F6FEB;
+  border-color: #1F6FEB;
+  color: #ffffff;
+}
+.dark .calendario-wrapper .fc-daygrid-day-number {
+  color: #E6EDF3;
+}
+.dark .calendario-wrapper .fc-day-other .fc-daygrid-day-number {
+  color: #8B949E;
+}
+.dark .calendario-wrapper .fc-scrollgrid {
+  border-color: #21262D;
+}
+.dark .calendario-wrapper .fc-event {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+}
+.dark .calendario-wrapper.medico-can-create .fc-timegrid-slot:hover {
+  background: rgba(30, 132, 73, 0.18);
+}

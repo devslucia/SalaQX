@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   CalendarPlus,
   Calendar,
+  CalendarDays,
   Users,
   Building2,
   Syringe,
@@ -34,6 +35,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={18} />, roles: ["admin", "encargada", "medico"] },
+  { label: "Calendario", href: "/calendario", icon: <CalendarDays size={18} />, roles: ["admin", "encargada", "medico"] },
   { label: "Solicitar Turno", href: "/solicitar-turno", icon: <CalendarPlus size={18} />, roles: ["medico"] },
   { label: "Turnos", href: "/turnos", icon: <Calendar size={18} />, roles: ["admin", "encargada", "medico"] },
   { label: "Usuarios", href: "/admin/usuarios", icon: <Users size={18} />, roles: ["admin"] },
