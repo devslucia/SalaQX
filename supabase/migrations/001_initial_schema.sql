@@ -30,7 +30,6 @@ create table public.users (
 create table public.quirofanos (
   id uuid primary key default uuid_generate_v4(),
   nombre text not null,
-  google_calendar_id text,
   activo boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -102,7 +101,6 @@ create table public.turnos (
   fecha_hora timestamptz not null,
   estado estado_turno not null default 'pendiente',
   motivo_rechazo text,
-  google_event_id text,
   created_at timestamptz not null default now()
 );
 

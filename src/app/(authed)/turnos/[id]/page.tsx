@@ -94,7 +94,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
       });
 
       toast.success("Turno confirmado", {
-        description: "Se notificó al médico y se creó el evento en Google Calendar",
+        description: "Se notificó al médico por email",
       });
       setConfirmDialogOpen(false);
       fetchTurno();

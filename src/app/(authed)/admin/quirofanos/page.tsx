@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Pencil, Power, Building2, Calendar } from "lucide-react";
+import { Plus, Pencil, Power, Building2 } from "lucide-react";
 import type { Quirofano } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
@@ -24,7 +24,7 @@ export default function QuirofanosPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Quirofano | null>(null);
-  const [form, setForm] = useState({ nombre: "", google_calendar_id: "" });
+  const [form, setForm] = useState({ nombre: "" });
   const [error, setError] = useState("");
   const supabase = createClient();
 
@@ -39,14 +39,14 @@ export default function QuirofanosPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ nombre: "", google_calendar_id: "" });
+    setForm({ nombre: "" });
     setError("");
     setDialogOpen(true);
   };
 
   const openEdit = (q: Quirofano) => {
     setEditing(q);
-    setForm({ nombre: q.nombre, google_calendar_id: q.google_calendar_id || "" });
+    setForm({ nombre: q.nombre });
     setError("");
     setDialogOpen(true);
   };
@@ -55,11 +55,11 @@ export default function QuirofanosPage() {
     if (!form.nombre.trim()) { setError("El nombre es obligatorio"); return; }
     try {
       if (editing) {
-        const { error } = await supabase.from("quirofanos").update({ nombre: form.nombre, google_calendar_id: form.google_calendar_id || null }).eq("id", editing.id);
+        const { error } = await supabase.from("quirofanos").update({ nombre: form.nombre }).eq("id", editing.id);
         if (error) throw error;
         toast.success("Quirófano actualizado");
       } else {
-        const { error } = await supabase.from("quirofanos").insert({ nombre: form.nombre, google_calendar_id: form.google_calendar_id || null });
+        const { error } = await supabase.from("quirofanos").insert({ nombre: form.nombre });
         if (error) throw error;
         toast.success("Quirófano creado", { description: form.nombre });
       }
@@ -86,7 +86,7 @@ export default function QuirofanosPage() {
       <PageHeader
         icon={Building2}
         title="Quirófanos"
-        description="Gestioná los quirófanos y sus calendarios asociados"
+        description="Gestioná los quirófanos disponibles para asignar a las cirugías"
         actions={
           <Button onClick={openCreate} size="lg">
             <Plus size={16} />
@@ -116,7 +116,6 @@ export default function QuirofanosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Quirófano</TableHead>
-                  <TableHead className="hidden md:table-cell">Google Calendar</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -129,22 +128,8 @@ export default function QuirofanosPage() {
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                           <Building2 size={16} />
                         </div>
-                        <div>
-                          <p>{q.nombre}</p>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            {q.google_calendar_id ? "Con calendario" : "Sin calendario"}
-                          </p>
-                        </div>
+                        <span>{q.nombre}</span>
                       </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {q.google_calendar_id ? (
-                        <code className="text-xs font-mono px-2 py-1 rounded bg-muted text-muted-foreground">
-                          {q.google_calendar_id}
-                        </code>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={q.activo ? "success" : "secondary"}>
@@ -189,17 +174,6 @@ export default function QuirofanosPage() {
                 placeholder="Ej: Quirófano 1"
                 autoFocus
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Google Calendar ID</Label>
-              <Input
-                value={form.google_calendar_id}
-                onChange={(e) => setForm({ ...form, google_calendar_id: e.target.value })}
-                placeholder="calendar@group.calendar.google.com"
-              />
-              <p className="text-xs text-muted-foreground">
-                Opcional — ID del calendario donde se crearán los eventos
-              </p>
             </div>
           </div>
           <DialogFooter>

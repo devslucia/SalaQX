@@ -22,7 +22,6 @@ export interface User {
 export interface Quirofano {
   id: string;
   nombre: string;
-  google_calendar_id: string | null;
   activo: boolean;
   created_at: string;
 }
@@ -72,7 +71,6 @@ export interface Turno {
   fecha_hora: string;
   estado: EstadoTurno;
   motivo_rechazo: string | null;
-  google_event_id: string | null;
   created_at: string;
   // Joined fields
   obra_social?: ObraSocial;
