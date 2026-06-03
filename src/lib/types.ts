@@ -5,7 +5,9 @@ export type EstadoTurno =
   | "confirmada"
   | "rechazada"
   | "suspendida"
-  | "eliminada";
+  | "eliminada"
+  | "solicitud_eliminacion"
+  | "solicitud_reprogramacion";
 
 export type DiaSemana = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -72,6 +74,11 @@ export interface Turno {
   fecha_hora: string;
   estado: EstadoTurno;
   motivo_rechazo: string | null;
+  solicitud_motivo: string | null;
+  solicitud_fecha_propuesta: string | null;
+  solicitud_rechazo_motivo: string | null;
+  solicitud_rechazo_at: string | null;
+  solicitud_rechazo_por: string | null;
   created_at: string;
   // Joined fields
   obra_social?: ObraSocial;
@@ -105,6 +112,18 @@ export const ESTADO_COLORS: Record<EstadoTurno, string> = {
   rechazada: "bg-destructive/10 text-destructive border-destructive/30",
   suspendida: "bg-muted text-muted-foreground border-border",
   eliminada: "bg-muted text-muted-foreground border-border",
+  solicitud_eliminacion: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  solicitud_reprogramacion: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30",
+};
+
+export const ESTADO_LABELS: Record<EstadoTurno, string> = {
+  pendiente: "Pendiente",
+  confirmada: "Confirmada",
+  rechazada: "Rechazada",
+  suspendida: "Suspendida",
+  eliminada: "Eliminada",
+  solicitud_eliminacion: "Eliminación solicitada",
+  solicitud_reprogramacion: "Reprogramación solicitada",
 };
 
 export const ESTADO_BORDER_COLORS: Record<EstadoTurno, string> = {
@@ -113,6 +132,8 @@ export const ESTADO_BORDER_COLORS: Record<EstadoTurno, string> = {
   rechazada: "border-l-destructive",
   suspendida: "border-l-muted-foreground",
   eliminada: "border-l-muted-foreground",
+  solicitud_eliminacion: "border-l-orange-500",
+  solicitud_reprogramacion: "border-l-violet-500",
 };
 
 export const QUIROFANO_COLOR_PALETTE = [

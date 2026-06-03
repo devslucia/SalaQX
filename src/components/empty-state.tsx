@@ -20,6 +20,8 @@ export const StatusIcons: Record<EstadoTurno, LucideIcon> = {
   rechazada: XCircle,
   suspendida: PauseCircle,
   eliminada: MinusCircle,
+  solicitud_eliminacion: AlertCircle,
+  solicitud_reprogramacion: AlertCircle,
 };
 
 export function EmptyState({

@@ -13,12 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ESTADO_BORDER_COLORS, type Turno, type Quirofano, type EstadoTurno } from "@/lib/types";
+import { ESTADO_BORDER_COLORS, ESTADO_LABELS, type Turno, type Quirofano, type EstadoTurno } from "@/lib/types";
 import { formatDateTime, cn } from "@/lib/utils";
 import { notify } from "@/lib/notify-client";
 import {
   ArrowLeft, CheckCircle, XCircle, Pause, Trash2, Pencil, User, Phone, Clock, Building2,
-  Stethoscope, Syringe, Heart, Hash, FileText,
+  Stethoscope, Syringe, Heart, Hash, FileText, MessageSquareWarning, CalendarClock, AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -43,6 +43,23 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({ fecha: "", hora: "", duracion_horas: "1", duracion_minutos: "0" });
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [solicitarEliminacionOpen, setSolicitarEliminacionOpen] = useState(false);
+  const [solicitudEliminacionMotivo, setSolicitudEliminacionMotivo] = useState("");
+
+  const [rechazarEliminacionOpen, setRechazarEliminacionOpen] = useState(false);
+  const [rechazoEliminacionMotivo, setRechazoEliminacionMotivo] = useState("");
+
+  const [solicitarReprogOpen, setSolicitarReprogOpen] = useState(false);
+  const [reprogForm, setReprogForm] = useState({ fecha: "", hora: "", motivo: "" });
+
+  const [rechazarReprogOpen, setRechazarReprogOpen] = useState(false);
+  const [rechazoReprogMotivo, setRechazoReprogMotivo] = useState("");
+
+  const [asignarReprogOpen, setAsignarReprogOpen] = useState(false);
+  const [asignarReprogForm, setAsignarReprogForm] = useState({ fecha: "", hora: "" });
 
   const fetchTurno = async () => {
     const { data } = await supabase.from("turnos").select("*").eq("id", id).single();
@@ -84,14 +101,9 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
         .from("turnos")
         .update({ estado: "confirmada", quirofano_id: selectedQuirofano })
         .eq("id", turno.id);
-
       if (error) throw error;
-
       void notify("turno-confirmado", { turno_id: turno.id });
-
-      toast.success("Turno confirmado", {
-        description: "Se notificó al médico por email",
-      });
+      toast.success("Turno confirmado", { description: "Se notificó al médico por email" });
       setConfirmDialogOpen(false);
       fetchTurno();
     } catch (e: any) {
@@ -109,11 +121,8 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
         .from("turnos")
         .update({ estado: "rechazada", motivo_rechazo: motivo })
         .eq("id", turno.id);
-
       if (error) throw error;
-
       void notify("turno-rechazado", { turno_id: turno.id, motivo });
-
       toast.success("Turno rechazado", { description: "Se notificó al médico con el motivo" });
       setRejectDialogOpen(false);
       setMotivoRechazo("");
@@ -138,13 +147,87 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
     setActionLoading(false);
   };
 
-  const handleDelete = async () => {
-    if (!turno) return;
-    if (!confirm("¿Eliminar este turno permanentemente?")) return;
+  const handleEdit = async () => {
+    if (!turno || !editForm.fecha || !editForm.hora) return;
     setActionLoading(true);
     try {
-      await supabase.from("turnos").update({ estado: "eliminada" }).eq("id", turno.id);
-      toast.success("Turno eliminado");
+      const fechaHora = new Date(`${editForm.fecha}T${editForm.hora}:00`);
+      const duracionTotal = parseInt(editForm.duracion_horas) * 60 + parseInt(editForm.duracion_minutos);
+      const fechaAnterior = new Date(turno.fecha_hora);
+      const cambios: { campo: "fecha_hora" | "duracion_minutos"; anterior: string | number; nuevo: string | number }[] = [];
+      if (fechaAnterior.toISOString() !== fechaHora.toISOString()) {
+        cambios.push({ campo: "fecha_hora", anterior: fechaAnterior.toISOString(), nuevo: fechaHora.toISOString() });
+      }
+      if (turno.duracion_minutos !== duracionTotal) {
+        cambios.push({ campo: "duracion_minutos", anterior: turno.duracion_minutos, nuevo: duracionTotal });
+      }
+      await supabase.from("turnos").update({
+        fecha_hora: fechaHora.toISOString(),
+        duracion_minutos: duracionTotal,
+      }).eq("id", turno.id);
+      void notify("cirugia-editada", { turno_id: turno.id, cambios });
+      toast.success("Turno actualizado");
+      setEditDialogOpen(false);
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
+
+  // Admin: hard-delete the turno. Notifies the medico if the turno was in
+  // solicitud_eliminacion state (the api route handles that branching).
+  const handleDelete = async () => {
+    if (!turno) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/turnos/${turno.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Error al eliminar");
+      }
+      toast.success("Turno eliminado correctamente");
+      setDeleteDialogOpen(false);
+      router.push("/turnos");
+    } catch (e: any) {
+      toast.error("Error al eliminar", { description: e.message });
+      setActionLoading(false);
+    }
+  };
+
+  // Medico: request deletion of a confirmed turno
+  const handleSolicitarEliminacion = async () => {
+    if (!turno) return;
+    setActionLoading(true);
+    try {
+      const motivo = solicitudEliminacionMotivo.trim() || null;
+      const { error } = await supabase.from("turnos").update({
+        estado: "solicitud_eliminacion",
+        solicitud_motivo: motivo,
+      }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("solicitud-eliminacion", { turno_id: turno.id, motivo: motivo ?? "" });
+      toast.success("Solicitud enviada", { description: "La encargada/admin la revisará" });
+      setSolicitarEliminacionOpen(false);
+      setSolicitudEliminacionMotivo("");
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
+
+  // Admin: approve a deletion request (= hard delete, with email to medico)
+  const handleAprobarEliminacion = async () => {
+    if (!turno) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/turnos/${turno.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Error al aprobar eliminación");
+      }
+      toast.success("Eliminación aprobada", { description: "Se notificó al médico" });
       router.push("/turnos");
     } catch (e: any) {
       toast.error("Error", { description: e.message });
@@ -152,39 +235,153 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  const handleEdit = async () => {
-    if (!turno || !editForm.fecha || !editForm.hora) return;
+  // Admin: reject a deletion request (keeps the turno, notifies medico)
+  const handleRechazarEliminacion = async () => {
+    if (!rechazoEliminacionMotivo.trim() || !turno) return;
     setActionLoading(true);
     try {
-      const fechaHora = new Date(`${editForm.fecha}T${editForm.hora}:00`);
-      const duracionTotal = parseInt(editForm.duracion_horas) * 60 + parseInt(editForm.duracion_minutos);
-
-      const fechaAnterior = new Date(turno.fecha_hora);
-      const cambios: { campo: "fecha_hora" | "duracion_minutos"; anterior: string | number; nuevo: string | number }[] = [];
-      if (fechaAnterior.toISOString() !== fechaHora.toISOString()) {
-        cambios.push({
-          campo: "fecha_hora",
-          anterior: fechaAnterior.toISOString(),
-          nuevo: fechaHora.toISOString(),
-        });
-      }
-      if (turno.duracion_minutos !== duracionTotal) {
-        cambios.push({
-          campo: "duracion_minutos",
-          anterior: turno.duracion_minutos,
-          nuevo: duracionTotal,
-        });
-      }
-
-      await supabase.from("turnos").update({
-        fecha_hora: fechaHora.toISOString(),
-        duracion_minutos: duracionTotal,
+      const motivo = rechazoEliminacionMotivo.trim();
+      const { error } = await supabase.from("turnos").update({
+        estado: "confirmada",
+        solicitud_rechazo_motivo: motivo,
+        solicitud_rechazo_at: new Date().toISOString(),
+        solicitud_rechazo_por: user?.id ?? null,
+        solicitud_motivo: null,
       }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("eliminacion-rechazada", { turno_id: turno.id, motivo });
+      toast.success("Solicitud rechazada", { description: "Se notificó al médico" });
+      setRechazarEliminacionOpen(false);
+      setRechazoEliminacionMotivo("");
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
 
-      void notify("cirugia-editada", { turno_id: turno.id, cambios });
+  // Medico: request reprogramación
+  const handleSolicitarReprogramacion = async () => {
+    if (!turno || !reprogForm.fecha || !reprogForm.hora) return;
+    setActionLoading(true);
+    try {
+      const fechaPropuesta = new Date(`${reprogForm.fecha}T${reprogForm.hora}:00`);
+      if (isNaN(fechaPropuesta.getTime())) {
+        toast.error("Fecha inválida");
+        setActionLoading(false);
+        return;
+      }
+      const motivo = reprogForm.motivo.trim() || null;
+      const { error } = await supabase.from("turnos").update({
+        estado: "solicitud_reprogramacion",
+        solicitud_motivo: motivo,
+        solicitud_fecha_propuesta: fechaPropuesta.toISOString(),
+      }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("solicitud-reprogramacion", {
+        turno_id: turno.id,
+        motivo: motivo ?? "",
+        fecha_propuesta: fechaPropuesta.toISOString(),
+      });
+      toast.success("Solicitud enviada", { description: "La encargada/admin la revisará" });
+      setSolicitarReprogOpen(false);
+      setReprogForm({ fecha: "", hora: "", motivo: "" });
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
 
-      toast.success("Turno actualizado");
-      setEditDialogOpen(false);
+  // Admin: accept the medico's proposed date
+  const handleAceptarReprogramacion = async () => {
+    if (!turno || !turno.solicitud_fecha_propuesta) return;
+    setActionLoading(true);
+    try {
+      const fechaAnterior = turno.fecha_hora;
+      const { error } = await supabase.from("turnos").update({
+        estado: "confirmada",
+        fecha_hora: turno.solicitud_fecha_propuesta,
+        solicitud_motivo: null,
+        solicitud_fecha_propuesta: null,
+        solicitud_rechazo_motivo: null,
+        solicitud_rechazo_at: null,
+        solicitud_rechazo_por: null,
+      }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("reprogramacion-confirmada", {
+        turno_id: turno.id,
+        fecha_propuesta: fechaAnterior,
+        motivo: "propuesta",
+      });
+      toast.success("Reprogramación aceptada", { description: "Se notificó al médico" });
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
+
+  // Admin: assign a different date than the medico proposed
+  const handleAsignarReprogramacion = async () => {
+    if (!turno || !asignarReprogForm.fecha || !asignarReprogForm.hora) return;
+    setActionLoading(true);
+    try {
+      const fechaNueva = new Date(`${asignarReprogForm.fecha}T${asignarReprogForm.hora}:00`);
+      if (isNaN(fechaNueva.getTime())) {
+        toast.error("Fecha inválida");
+        setActionLoading(false);
+        return;
+      }
+      const fechaAnterior = turno.fecha_hora;
+      const { error } = await supabase.from("turnos").update({
+        estado: "confirmada",
+        fecha_hora: fechaNueva.toISOString(),
+        solicitud_motivo: null,
+        solicitud_fecha_propuesta: null,
+        solicitud_rechazo_motivo: null,
+        solicitud_rechazo_at: null,
+        solicitud_rechazo_por: null,
+      }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("reprogramacion-confirmada", {
+        turno_id: turno.id,
+        fecha_propuesta: fechaAnterior,
+        motivo: "asignada",
+      });
+      toast.success("Nueva fecha asignada", { description: "Se notificó al médico" });
+      setAsignarReprogOpen(false);
+      setAsignarReprogForm({ fecha: "", hora: "" });
+      fetchTurno();
+    } catch (e: any) {
+      toast.error("Error", { description: e.message });
+    }
+    setActionLoading(false);
+  };
+
+  // Admin: reject reprogramación
+  const handleRechazarReprogramacion = async () => {
+    if (!rechazoReprogMotivo.trim() || !turno || !turno.solicitud_fecha_propuesta) return;
+    setActionLoading(true);
+    try {
+      const motivo = rechazoReprogMotivo.trim();
+      const { error } = await supabase.from("turnos").update({
+        estado: "confirmada",
+        solicitud_rechazo_motivo: motivo,
+        solicitud_rechazo_at: new Date().toISOString(),
+        solicitud_rechazo_por: user?.id ?? null,
+        solicitud_motivo: null,
+        solicitud_fecha_propuesta: null,
+      }).eq("id", turno.id);
+      if (error) throw error;
+      void notify("reprogramacion-rechazada", {
+        turno_id: turno.id,
+        motivo,
+        fecha_propuesta: turno.solicitud_fecha_propuesta,
+      });
+      toast.success("Reprogramación rechazada", { description: "Se notificó al médico" });
+      setRechazarReprogOpen(false);
+      setRechazoReprogMotivo("");
       fetchTurno();
     } catch (e: any) {
       toast.error("Error", { description: e.message });
@@ -208,14 +405,24 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const isAdminOrEncargada = user && ["admin", "encargada"].includes(user.rol);
-  const canAct = isAdminOrEncargada && (turno.estado === "pendiente" || turno.estado === "confirmada");
+  const isMedicoOwner = user?.id === turno.medico_id;
 
-  const estadoBadgeVariant: Record<EstadoTurno, "default" | "success" | "destructive" | "warning" | "secondary"> = {
-    pendiente: "warning",
-    confirmada: "success",
-    rechazada: "destructive",
-    suspendida: "secondary",
-    eliminada: "secondary",
+  // Permission flags
+  const canConfirmReject = isAdminOrEncargada && turno.estado === "pendiente";
+  const canEditOrSuspend = isAdminOrEncargada && turno.estado === "confirmada";
+  const canMedicoRequestDelete = isMedicoOwner && turno.estado === "confirmada";
+  const canMedicoRequestReprog = isMedicoOwner && (turno.estado === "confirmada" || turno.estado === "pendiente");
+  const isEliminacionSolicitada = turno.estado === "solicitud_eliminacion";
+  const isReprogSolicitada = turno.estado === "solicitud_reprogramacion";
+
+  const estadoBadgeClass: Record<EstadoTurno, string> = {
+    pendiente: "bg-warning/15 text-warning border-warning/30",
+    confirmada: "bg-success/15 text-success border-success/30",
+    rechazada: "bg-destructive/15 text-destructive border-destructive/30",
+    suspendida: "bg-muted text-muted-foreground border-border",
+    eliminada: "bg-muted text-muted-foreground border-border",
+    solicitud_eliminacion: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+    solicitud_reprogramacion: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30",
   };
 
   return (
@@ -235,11 +442,38 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
         title="Detalle del Turno"
         description={`${turno.paciente_nombre} · DNI ${turno.paciente_dni}`}
         actions={
-          <Badge variant={estadoBadgeVariant[turno.estado]} className="capitalize text-sm px-3 py-1.5">
-            {turno.estado}
+          <Badge className={cn("capitalize text-sm px-3 py-1.5 border", estadoBadgeClass[turno.estado])}>
+            {ESTADO_LABELS[turno.estado] ?? turno.estado}
           </Badge>
         }
       />
+
+      {/* Solicitud info banners */}
+      {isEliminacionSolicitada && (
+        <Alert className="border-orange-500/30 bg-orange-500/10">
+          <MessageSquareWarning className="text-orange-600" size={16} />
+          <AlertDescription>
+            <strong>Eliminación solicitada por el médico</strong>
+            {turno.solicitud_motivo && (
+              <span className="block mt-1 text-sm">Motivo: {turno.solicitud_motivo}</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+      {isReprogSolicitada && turno.solicitud_fecha_propuesta && (
+        <Alert className="border-violet-500/30 bg-violet-500/10">
+          <CalendarClock className="text-violet-600" size={16} />
+          <AlertDescription>
+            <strong>Reprogramación solicitada por el médico</strong>
+            <span className="block mt-1 text-sm">
+              Propone: {formatDateTime(turno.solicitud_fecha_propuesta)}
+            </span>
+            {turno.solicitud_motivo && (
+              <span className="block text-sm">Motivo: {turno.solicitud_motivo}</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className={cn("border-l-4", ESTADO_BORDER_COLORS[turno.estado])}>
@@ -275,10 +509,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             <Field label="Anestesia" value={turno.tipo_anestesia?.nombre || "—"} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Duración" value={`${turno.duracion_minutos} min`} />
-              <Field
-                label="Quirófano"
-                value={turno.quirofano?.nombre || "Sin asignar"}
-              />
+              <Field label="Quirófano" value={turno.quirofano?.nombre || "Sin asignar"} />
             </div>
             <div className="flex gap-2 pt-1">
               {turno.usa_idi && <Badge variant="default">Usa IDI</Badge>}
@@ -305,20 +536,15 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10 text-warning">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                 <Clock size={16} />
               </div>
-              Fecha y Hora
+              Programación
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm">
-            <p className="font-semibold text-lg">{formatDateTime(turno.fecha_hora)}</p>
-            {turno.quirofano && (
-              <p className="text-muted-foreground mt-1.5 flex items-center gap-1.5">
-                <Building2 size={14} />
-                {turno.quirofano.nombre}
-              </p>
-            )}
+          <CardContent className="space-y-2.5 text-sm">
+            <Field label="Fecha y hora" value={formatDateTime(turno.fecha_hora)} />
+            <Field label="Creado" value={new Date(turno.created_at).toLocaleString("es-AR")} />
           </CardContent>
         </Card>
       </div>
@@ -331,14 +557,23 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
           </AlertDescription>
         </Alert>
       )}
+      {turno.solicitud_rechazo_motivo && (
+        <Alert variant="destructive">
+          <AlertTriangle size={16} />
+          <AlertDescription>
+            <strong>Última solicitud rechazada:</strong> {turno.solicitud_rechazo_motivo}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {canAct && (
+      {/* Actions card */}
+      {(canConfirmReject || canEditOrSuspend || isAdminOrEncargada || canMedicoRequestDelete || canMedicoRequestReprog || isEliminacionSolicitada || isReprogSolicitada) && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Acciones</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {turno.estado === "pendiente" && (
+            {canConfirmReject && (
               <>
                 <Button
                   variant="success"
@@ -354,7 +589,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
                 </Button>
               </>
             )}
-            {turno.estado === "confirmada" && (
+            {canEditOrSuspend && (
               <>
                 <Button
                   variant="outline"
@@ -376,8 +611,59 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
                 </Button>
               </>
             )}
-            {isAdminOrEncargada && (
-              <Button variant="destructive" onClick={handleDelete}>
+            {isEliminacionSolicitada && isAdminOrEncargada && (
+              <>
+                <Button variant="destructive" onClick={handleAprobarEliminacion} disabled={actionLoading}>
+                  <CheckCircle size={16} /> Aprobar eliminación
+                </Button>
+                <Button variant="outline" onClick={() => setRechazarEliminacionOpen(true)}>
+                  <XCircle size={16} /> Rechazar solicitud
+                </Button>
+              </>
+            )}
+            {isReprogSolicitada && isAdminOrEncargada && (
+              <>
+                <Button variant="success" onClick={handleAceptarReprogramacion} disabled={actionLoading}>
+                  <CheckCircle size={16} /> Aceptar fecha propuesta
+                </Button>
+                <Button variant="outline" onClick={() => {
+                  const fh = turno.solicitud_fecha_propuesta ? new Date(turno.solicitud_fecha_propuesta) : new Date();
+                  setAsignarReprogForm({
+                    fecha: fh.toISOString().split("T")[0],
+                    hora: `${String(fh.getHours()).padStart(2, "0")}:${String(fh.getMinutes()).padStart(2, "0")}`,
+                  });
+                  setAsignarReprogOpen(true);
+                }}>
+                  <CalendarClock size={16} /> Asignar otra fecha
+                </Button>
+                <Button variant="destructive" onClick={() => setRechazarReprogOpen(true)}>
+                  <XCircle size={16} /> Rechazar
+                </Button>
+              </>
+            )}
+            {canMedicoRequestReprog && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const fh = new Date(turno.fecha_hora);
+                  setReprogForm({
+                    fecha: fh.toISOString().split("T")[0],
+                    hora: `${String(fh.getHours()).padStart(2, "0")}:${String(fh.getMinutes()).padStart(2, "0")}`,
+                    motivo: "",
+                  });
+                  setSolicitarReprogOpen(true);
+                }}
+              >
+                <CalendarClock size={16} /> Solicitar reprogramación
+              </Button>
+            )}
+            {canMedicoRequestDelete && (
+              <Button variant="outline" onClick={() => setSolicitarEliminacionOpen(true)}>
+                <Trash2 size={16} /> Solicitar eliminación
+              </Button>
+            )}
+            {isAdminOrEncargada && (turno.estado === "pendiente" || turno.estado === "confirmada" || turno.estado === "suspendida" || turno.estado === "rechazada") && (
+              <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
                 <Trash2 size={16} /> Eliminar
               </Button>
             )}
@@ -407,14 +693,8 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="success"
-              onClick={handleConfirm}
-              disabled={!selectedQuirofano || actionLoading}
-            >
+            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>Cancelar</Button>
+            <Button variant="success" onClick={handleConfirm} disabled={!selectedQuirofano || actionLoading}>
               {actionLoading ? "Confirmando..." : "Confirmar Turno"}
             </Button>
           </DialogFooter>
@@ -442,14 +722,8 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={!motivoRechazo.trim() || actionLoading}
-            >
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={!motivoRechazo.trim() || actionLoading}>
               {actionLoading ? "Rechazando..." : "Rechazar Turno"}
             </Button>
           </DialogFooter>
@@ -466,28 +740,20 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Fecha</Label>
-                <Input
-                  type="date"
-                  value={editForm.fecha}
-                  onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })}
-                />
+                <Input type="date" value={editForm.fecha}
+                  onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Hora</Label>
-                <Input
-                  type="time"
-                  value={editForm.hora}
-                  onChange={(e) => setEditForm({ ...editForm, hora: e.target.value })}
-                />
+                <Input type="time" value={editForm.hora}
+                  onChange={(e) => setEditForm({ ...editForm, hora: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Horas</Label>
-                <Select
-                  value={editForm.duracion_horas}
-                  onChange={(e) => setEditForm({ ...editForm, duracion_horas: e.target.value })}
-                >
+                <Select value={editForm.duracion_horas}
+                  onChange={(e) => setEditForm({ ...editForm, duracion_horas: e.target.value })}>
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((h) => (
                     <option key={h} value={h}>{h}h</option>
                   ))}
@@ -495,10 +761,8 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <div className="space-y-2">
                 <Label>Minutos</Label>
-                <Select
-                  value={editForm.duracion_minutos}
-                  onChange={(e) => setEditForm({ ...editForm, duracion_minutos: e.target.value })}
-                >
+                <Select value={editForm.duracion_minutos}
+                  onChange={(e) => setEditForm({ ...editForm, duracion_minutos: e.target.value })}>
                   {[0, 15, 30, 45].map((m) => (
                     <option key={m} value={m}>{m}min</option>
                   ))}
@@ -507,11 +771,201 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleEdit} disabled={actionLoading}>
               {actionLoading ? "Guardando..." : "Guardar Cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog (admin/encargada) */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent onClose={() => setDeleteDialogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Eliminar turno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm">
+              ¿Estás seguro que querés eliminar este turno? Esta acción no se puede deshacer.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Paciente: <strong>{turno.paciente_nombre}</strong> ·{" "}
+              Fecha: <strong>{formatDateTime(turno.fecha_hora)}</strong>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={actionLoading}>
+              {actionLoading ? "Eliminando..." : "Eliminar definitivamente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Solicitar eliminación (médico) */}
+      <Dialog open={solicitarEliminacionOpen} onOpenChange={setSolicitarEliminacionOpen}>
+        <DialogContent onClose={() => setSolicitarEliminacionOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Solicitar eliminación de turno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              La encargada o admin recibirá tu solicitud y decidirá si la aprueba.
+              Tu turno seguirá confirmado mientras tanto.
+            </p>
+            <div className="space-y-2">
+              <Label>Motivo (opcional)</Label>
+              <Textarea
+                placeholder="¿Por qué querés que se elimine este turno?"
+                value={solicitudEliminacionMotivo}
+                onChange={(e) => setSolicitudEliminacionMotivo(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSolicitarEliminacionOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleSolicitarEliminacion} disabled={actionLoading}>
+              {actionLoading ? "Enviando..." : "Enviar solicitud"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rechazar eliminación (admin) */}
+      <Dialog open={rechazarEliminacionOpen} onOpenChange={setRechazarEliminacionOpen}>
+        <DialogContent onClose={() => setRechazarEliminacionOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Rechazar solicitud de eliminación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              El médico será notificado con el motivo. El turno volverá a estado confirmada.
+            </p>
+            <div className="space-y-2">
+              <Label>Motivo del rechazo (obligatorio)</Label>
+              <Textarea
+                placeholder="Explicá por qué no se aprueba la eliminación..."
+                value={rechazoEliminacionMotivo}
+                onChange={(e) => setRechazoEliminacionMotivo(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRechazarEliminacionOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleRechazarEliminacion}
+              disabled={!rechazoEliminacionMotivo.trim() || actionLoading}>
+              {actionLoading ? "Rechazando..." : "Rechazar solicitud"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Solicitar reprogramación (médico) */}
+      <Dialog open={solicitarReprogOpen} onOpenChange={setSolicitarReprogOpen}>
+        <DialogContent onClose={() => setSolicitarReprogOpen(false)} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Solicitar reprogramación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Proponé una nueva fecha y hora. La encargada o admin la revisará.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Nueva fecha</Label>
+                <Input type="date" value={reprogForm.fecha}
+                  onChange={(e) => setReprogForm({ ...reprogForm, fecha: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nueva hora</Label>
+                <Input type="time" value={reprogForm.hora}
+                  onChange={(e) => setReprogForm({ ...reprogForm, hora: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo o aclaración (opcional)</Label>
+              <Textarea
+                placeholder="Contanos por qué necesitás reprogramar..."
+                value={reprogForm.motivo}
+                onChange={(e) => setReprogForm({ ...reprogForm, motivo: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSolicitarReprogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSolicitarReprogramacion}
+              disabled={!reprogForm.fecha || !reprogForm.hora || actionLoading}>
+              {actionLoading ? "Enviando..." : "Enviar solicitud"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Asignar otra fecha (admin) */}
+      <Dialog open={asignarReprogOpen} onOpenChange={setAsignarReprogOpen}>
+        <DialogContent onClose={() => setAsignarReprogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Asignar otra fecha al turno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              El médico propuso {turno.solicitud_fecha_propuesta && formatDateTime(turno.solicitud_fecha_propuesta)}.
+              Asigná una fecha y hora diferente.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input type="date" value={asignarReprogForm.fecha}
+                  onChange={(e) => setAsignarReprogForm({ ...asignarReprogForm, fecha: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Hora</Label>
+                <Input type="time" value={asignarReprogForm.hora}
+                  onChange={(e) => setAsignarReprogForm({ ...asignarReprogForm, hora: e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAsignarReprogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAsignarReprogramacion}
+              disabled={!asignarReprogForm.fecha || !asignarReprogForm.hora || actionLoading}>
+              {actionLoading ? "Asignando..." : "Asignar y notificar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rechazar reprogramación (admin) */}
+      <Dialog open={rechazarReprogOpen} onOpenChange={setRechazarReprogOpen}>
+        <DialogContent onClose={() => setRechazarReprogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Rechazar reprogramación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              El médico será notificado. El turno queda en su fecha y hora original.
+            </p>
+            <div className="space-y-2">
+              <Label>Motivo del rechazo (obligatorio)</Label>
+              <Textarea
+                placeholder="Explicá por qué no se aprueba la reprogramación..."
+                value={rechazoReprogMotivo}
+                onChange={(e) => setRechazoReprogMotivo(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRechazarReprogOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleRechazarReprogramacion}
+              disabled={!rechazoReprogMotivo.trim() || actionLoading}>
+              {actionLoading ? "Rechazando..." : "Rechazar"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -9,6 +9,12 @@ import { TurnoRecordatorioEmail } from "@/emails/turno-recordatorio";
 import { TurnoEditadoEmail } from "@/emails/turno-editado";
 import { TurnoSuspendidoEmail } from "@/emails/turno-suspendido";
 import { NuevaSolicitudEmail } from "@/emails/nueva-solicitud";
+import { SolicitudEliminacionEmail } from "@/emails/solicitud-eliminacion";
+import { EliminacionAprobadaEmail } from "@/emails/eliminacion-aprobada";
+import { EliminacionRechazadaEmail } from "@/emails/eliminacion-rechazada";
+import { SolicitudReprogramacionEmail } from "@/emails/solicitud-reprogramacion";
+import { ReprogramacionConfirmadaEmail } from "@/emails/reprogramacion-confirmada";
+import { ReprogramacionRechazadaEmail } from "@/emails/reprogramacion-rechazada";
 import { formatFechaArg, formatFechaCortaArg, formatHoraArg } from "@/lib/dates";
 
 export type NotificationTipo =
@@ -17,7 +23,13 @@ export type NotificationTipo =
   | "rechazo"
   | "recordatorio"
   | "edicion"
-  | "suspension";
+  | "suspension"
+  | "solicitud_eliminacion"
+  | "eliminacion_aprobada"
+  | "eliminacion_rechazada"
+  | "solicitud_reprogramacion"
+  | "reprogramacion_confirmada"
+  | "reprogramacion_rechazada";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
 const RESEND_FROM = process.env.RESEND_FROM ?? "SalaQX <onboarding@resend.dev>";
@@ -194,57 +206,24 @@ async function sendOne(params: {
 export async function sendNuevaSolicitud(turnoId: string): Promise<SendResult> {
   const ctx = await loadTurnoContext(turnoId);
   if (!ctx) return { ok: false, error: "turno not found" };
-
-  const supabase = getAdminClient();
-  const { data: reviewers, error: revErr } = await supabase
-    .from("users")
-    .select("id, nombre, email, rol")
-    .in("rol", ["admin", "encargada"])
-    .eq("activo", true);
-
-  if (revErr) {
-    console.error("[resend] failed to list reviewers:", revErr);
-    return { ok: false, error: revErr.message };
-  }
-
-  const recipients = (reviewers ?? []).filter((r) => r.email) as Array<{
-    id: string;
-    nombre: string;
-    email: string;
-  }>;
-
-  if (recipients.length === 0) {
-    console.warn("[resend] no admin/encargada recipients for nueva_solicitud");
-    return { ok: false, error: "no admin/encargada recipients" };
-  }
-
+  if (!ctx.medico) return { ok: false, error: "medico not found" };
   const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
 
-  const results = await Promise.all(
-    recipients.map((r) =>
-      sendOne({
-        to: r.email,
-        subject: `Nueva solicitud de turno — ${ctx.medico?.nombre ?? "Médico"}`,
-        react: NuevaSolicitudEmail({
-          destinatarioNombre: r.nombre,
-          medico: ctx.medico!,
-          paciente: ctx.turno,
-          tipoCirugia: ctx.turno.tipo_cirugia,
-          fechaHora: ctx.turno.fecha_hora,
-          duracion: formatDuracion(ctx.turno.duracion_minutos),
-          turnoUrl,
-        }),
-        log: { turnoId, destinatarioId: r.id, tipo: "nueva_solicitud" },
+  return sendToReviewers(
+    turnoId,
+    () => `Nueva solicitud de turno — ${ctx.medico!.nombre}`,
+    (r) =>
+      NuevaSolicitudEmail({
+        destinatarioNombre: r.nombre,
+        medico: ctx.medico!,
+        paciente: ctx.turno,
+        tipoCirugia: ctx.turno.tipo_cirugia,
+        fechaHora: ctx.turno.fecha_hora,
+        duracion: formatDuracion(ctx.turno.duracion_minutos),
+        turnoUrl,
       }),
-    ),
+    "nueva_solicitud",
   );
-
-  const failed = results.filter((r) => !r.ok);
-  return {
-    ok: failed.length === 0,
-    error: failed.length > 0 ? failed.map((r) => r.error).join("; ") : undefined,
-    recipients: recipients.map((r) => r.email),
-  };
 }
 
 export async function sendTurnoConfirmado(turnoId: string): Promise<SendResult> {
@@ -381,5 +360,193 @@ export async function sendCirugiaSuspendida(turnoId: string): Promise<SendResult
       fechaHora: ctx.turno.fecha_hora,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "suspension" },
+  });
+}
+
+interface Reviewer { id: string; nombre: string; email: string }
+
+async function getReviewerRecipients(): Promise<Reviewer[]> {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, nombre, email, rol")
+    .in("rol", ["admin", "encargada"])
+    .eq("activo", true);
+  if (error) {
+    console.error("[resend] failed to list reviewers:", error);
+    return [];
+  }
+  return (data ?? []).filter((r) => r.email) as Reviewer[];
+}
+
+async function sendToReviewers(
+  turnoId: string,
+  subjectFor: (r: Reviewer) => string,
+  reactFor: (r: Reviewer) => React.ReactElement,
+  tipo: NotificationTipo,
+): Promise<SendResult> {
+  const reviewers = await getReviewerRecipients();
+  if (reviewers.length === 0) {
+    return { ok: false, error: "no admin/encargada recipients" };
+  }
+  const results = await Promise.all(
+    reviewers.map((r) =>
+      sendOne({
+        to: r.email,
+        subject: subjectFor(r),
+        react: reactFor(r),
+        log: { turnoId, destinatarioId: r.id, tipo },
+      }),
+    ),
+  );
+  const failed = results.filter((r) => !r.ok);
+  return {
+    ok: failed.length === 0,
+    error: failed.length > 0 ? failed.map((r) => r.error).join("; ") : undefined,
+    recipients: reviewers.map((r) => r.email),
+  };
+}
+
+export async function sendSolicitudEliminacion(
+  turnoId: string,
+  motivo: string | null,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico) return { ok: false, error: "medico not found" };
+  const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
+
+  return sendToReviewers(
+    turnoId,
+    () => `Solicitud de eliminación de turno — ${ctx.medico!.nombre}`,
+    (r) =>
+      SolicitudEliminacionEmail({
+        destinatarioNombre: r.nombre,
+        medico: ctx.medico!,
+        paciente: ctx.turno,
+        tipoCirugia: ctx.turno.tipo_cirugia,
+        fechaHora: ctx.turno.fecha_hora,
+        quirofano: ctx.quirofano,
+        motivo,
+        turnoUrl,
+      }),
+    "solicitud_eliminacion",
+  );
+}
+
+export async function sendEliminacionAprobada(turnoId: string): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
+
+  return sendOne({
+    to: ctx.medico.email,
+    subject: `Eliminación aprobada — ${ctx.turno.paciente_nombre}`,
+    react: EliminacionAprobadaEmail({
+      destinatarioNombre: ctx.medico.nombre,
+      paciente: ctx.turno,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaHora: ctx.turno.fecha_hora,
+    }),
+    log: { turnoId, destinatarioId: ctx.medico.id, tipo: "eliminacion_aprobada" },
+  });
+}
+
+export async function sendEliminacionRechazada(
+  turnoId: string,
+  motivoRechazo: string,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
+
+  return sendOne({
+    to: ctx.medico.email,
+    subject: `Eliminación rechazada — ${ctx.turno.paciente_nombre}`,
+    react: EliminacionRechazadaEmail({
+      destinatarioNombre: ctx.medico.nombre,
+      paciente: ctx.turno,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaHora: ctx.turno.fecha_hora,
+      motivoRechazo,
+    }),
+    log: { turnoId, destinatarioId: ctx.medico.id, tipo: "eliminacion_rechazada" },
+  });
+}
+
+export async function sendSolicitudReprogramacion(
+  turnoId: string,
+  fechaPropuesta: string,
+  motivo: string | null,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico) return { ok: false, error: "medico not found" };
+  const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
+
+  return sendToReviewers(
+    turnoId,
+    () => `Solicitud de reprogramación — ${ctx.medico!.nombre}`,
+    (r) =>
+      SolicitudReprogramacionEmail({
+        destinatarioNombre: r.nombre,
+        medico: ctx.medico!,
+        paciente: ctx.turno,
+        tipoCirugia: ctx.turno.tipo_cirugia,
+        fechaActual: ctx.turno.fecha_hora,
+        fechaPropuesta,
+        motivo,
+        turnoUrl,
+      }),
+    "solicitud_reprogramacion",
+  );
+}
+
+export async function sendReprogramacionConfirmada(
+  turnoId: string,
+  fechaAnterior: string,
+  propuestaPorMedico: boolean,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
+
+  return sendOne({
+    to: ctx.medico.email,
+    subject: `Reprogramación confirmada — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
+    react: ReprogramacionConfirmadaEmail({
+      destinatarioNombre: ctx.medico.nombre,
+      paciente: ctx.turno,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaAnterior,
+      fechaNueva: ctx.turno.fecha_hora,
+      quirofano: ctx.quirofano,
+      propuestaPorMedico,
+    }),
+    log: { turnoId, destinatarioId: ctx.medico.id, tipo: "reprogramacion_confirmada" },
+  });
+}
+
+export async function sendReprogramacionRechazada(
+  turnoId: string,
+  fechaPropuesta: string,
+  motivoRechazo: string,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
+
+  return sendOne({
+    to: ctx.medico.email,
+    subject: `Reprogramación rechazada — ${ctx.turno.paciente_nombre}`,
+    react: ReprogramacionRechazadaEmail({
+      destinatarioNombre: ctx.medico.nombre,
+      paciente: ctx.turno,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaOriginal: ctx.turno.fecha_hora,
+      fechaPropuesta,
+      motivoRechazo,
+    }),
+    log: { turnoId, destinatarioId: ctx.medico.id, tipo: "reprogramacion_rechazada" },
   });
 }

@@ -297,13 +297,20 @@ export default function CalendarioPage() {
 
   const handleDelete = async () => {
     if (!detail) return;
-    const ok = window.confirm("¿Eliminar este turno permanentemente?");
+    const ok = window.confirm("¿Estás seguro que querés eliminar este turno? Esta acción no se puede deshacer.");
     if (!ok) return;
-    const { error } = await supabase.from("turnos").update({ estado: "eliminada" }).eq("id", detail.id);
-    if (error) { toast.error("Error al eliminar"); return; }
-    toast.success("Turno eliminado");
-    setDetailId(null);
-    refreshTurnos();
+    try {
+      const res = await fetch(`/api/turnos/${detail.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Error al eliminar");
+      }
+      toast.success("Turno eliminado correctamente");
+      setDetailId(null);
+      refreshTurnos();
+    } catch (err: any) {
+      toast.error("Error al eliminar", { description: err.message });
+    }
   };
 
   const handleEditRedirect = () => {

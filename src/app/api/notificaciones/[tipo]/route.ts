@@ -6,6 +6,12 @@ import {
   sendRecordatorio24hs,
   sendCirugiaEditada,
   sendCirugiaSuspendida,
+  sendSolicitudEliminacion,
+  sendEliminacionAprobada,
+  sendEliminacionRechazada,
+  sendSolicitudReprogramacion,
+  sendReprogramacionConfirmada,
+  sendReprogramacionRechazada,
   type NotificationTipo,
   isResendConfigured,
 } from "@/lib/resend";
@@ -24,6 +30,12 @@ const VALID_TIPOS: NotificationTipo[] = [
   "recordatorio",
   "edicion",
   "suspension",
+  "solicitud_eliminacion",
+  "eliminacion_aprobada",
+  "eliminacion_rechazada",
+  "solicitud_reprogramacion",
+  "reprogramacion_confirmada",
+  "reprogramacion_rechazada",
 ];
 
 function normalizarTipo(t: string): NotificationTipo | null {
@@ -40,6 +52,18 @@ function normalizarTipo(t: string): NotificationTipo | null {
     "edicion": "edicion",
     "cirugia-suspendida": "suspension",
     "suspension": "suspension",
+    "solicitud-eliminacion": "solicitud_eliminacion",
+    "solicitud_eliminacion": "solicitud_eliminacion",
+    "eliminacion-aprobada": "eliminacion_aprobada",
+    "eliminacion_aprobada": "eliminacion_aprobada",
+    "eliminacion-rechazada": "eliminacion_rechazada",
+    "eliminacion_rechazada": "eliminacion_rechazada",
+    "solicitud-reprogramacion": "solicitud_reprogramacion",
+    "solicitud_reprogramacion": "solicitud_reprogramacion",
+    "reprogramacion-confirmada": "reprogramacion_confirmada",
+    "reprogramacion_confirmada": "reprogramacion_confirmada",
+    "reprogramacion-rechazada": "reprogramacion_rechazada",
+    "reprogramacion_rechazada": "reprogramacion_rechazada",
   };
   const out = map[t];
   return VALID_TIPOS.includes(out) ? out : null;
@@ -55,14 +79,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  let body: { turno_id?: string; motivo?: string; cambios?: unknown };
+  let body: {
+    turno_id?: string;
+    motivo?: string;
+    cambios?: unknown;
+    fecha_propuesta?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  const { turno_id, motivo, cambios } = body;
+  const { turno_id, motivo, cambios, fecha_propuesta } = body;
   if (!turno_id) {
     return NextResponse.json({ error: "turno_id es requerido" }, { status: 400 });
   }
@@ -99,6 +128,44 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         break;
       case "suspension":
         result = await sendCirugiaSuspendida(turno_id);
+        break;
+      case "solicitud_eliminacion":
+        result = await sendSolicitudEliminacion(turno_id, motivo ?? null);
+        break;
+      case "eliminacion_aprobada":
+        result = await sendEliminacionAprobada(turno_id);
+        break;
+      case "eliminacion_rechazada":
+        result = await sendEliminacionRechazada(turno_id, motivo ?? "Sin motivo especificado");
+        break;
+      case "solicitud_reprogramacion":
+        if (!fecha_propuesta) {
+          return NextResponse.json(
+            { error: "fecha_propuesta es requerida" },
+            { status: 400 },
+          );
+        }
+        result = await sendSolicitudReprogramacion(turno_id, fecha_propuesta, motivo ?? null);
+        break;
+      case "reprogramacion_confirmada":
+        result = await sendReprogramacionConfirmada(
+          turno_id,
+          fecha_propuesta ?? new Date().toISOString(),
+          Boolean(motivo),
+        );
+        break;
+      case "reprogramacion_rechazada":
+        if (!fecha_propuesta) {
+          return NextResponse.json(
+            { error: "fecha_propuesta es requerida" },
+            { status: 400 },
+          );
+        }
+        result = await sendReprogramacionRechazada(
+          turno_id,
+          fecha_propuesta,
+          motivo ?? "Sin motivo especificado",
+        );
         break;
     }
 

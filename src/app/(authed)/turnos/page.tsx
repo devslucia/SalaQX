@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ESTADO_BORDER_COLORS,
+  ESTADO_LABELS,
   type Turno,
   type EstadoTurno,
 } from "@/lib/types";
 import { formatDateTime, cn } from "@/lib/utils";
-import { Calendar, Filter, Search, User, Building2, CalendarPlus, SearchX } from "lucide-react";
+import { Calendar, Filter, Search, User, Building2, CalendarPlus, SearchX, Inbox } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
@@ -28,7 +29,21 @@ const estadoVariant: Record<EstadoTurno, "default" | "success" | "destructive" |
   rechazada: "destructive",
   suspendida: "secondary",
   eliminada: "secondary",
+  solicitud_eliminacion: "default",
+  solicitud_reprogramacion: "default",
 };
+
+const estadoBadgeClass: Record<EstadoTurno, string> = {
+  pendiente: "bg-warning/15 text-warning border-warning/30",
+  confirmada: "bg-success/15 text-success border-success/30",
+  rechazada: "bg-destructive/15 text-destructive border-destructive/30",
+  suspendida: "",
+  eliminada: "",
+  solicitud_eliminacion: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  solicitud_reprogramacion: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30",
+};
+
+const SOLICITUD_STATES: EstadoTurno[] = ["solicitud_eliminacion", "solicitud_reprogramacion"];
 
 export default function TurnosPage() {
   const { user } = useAuth();
@@ -81,7 +96,10 @@ export default function TurnosPage() {
   }, [user]);
 
   const filteredTurnos = turnos.filter((t) => {
-    const matchesEstado = filtroEstado === "todos" || t.estado === filtroEstado;
+    const matchesEstado =
+      filtroEstado === "todos" ||
+      (filtroEstado === "solicitudes" && SOLICITUD_STATES.includes(t.estado)) ||
+      t.estado === filtroEstado;
     const matchesBusqueda =
       !busqueda ||
       t.paciente_nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -89,6 +107,9 @@ export default function TurnosPage() {
       t.tipo_cirugia.toLowerCase().includes(busqueda.toLowerCase());
     return matchesEstado && matchesBusqueda;
   });
+
+  const isReviewer = user && ["admin", "encargada"].includes(user.rol);
+  const solicitudesCount = turnos.filter((t) => SOLICITUD_STATES.includes(t.estado)).length;
 
   return (
     <div className="space-y-8">
@@ -122,6 +143,11 @@ export default function TurnosPage() {
           <Filter size={16} className="text-muted-foreground shrink-0" />
           <Select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
             <option value="todos">Todos los estados</option>
+            {isReviewer && (
+              <option value="solicitudes">
+                Solicitudes pendientes{solicitudesCount > 0 ? ` (${solicitudesCount})` : ""}
+              </option>
+            )}
             <option value="pendiente">Pendientes</option>
             <option value="confirmada">Confirmadas</option>
             <option value="rechazada">Rechazadas</option>
@@ -129,6 +155,26 @@ export default function TurnosPage() {
           </Select>
         </div>
       </div>
+
+      {isReviewer && solicitudesCount > 0 && filtroEstado !== "solicitudes" && (
+        <button
+          type="button"
+          onClick={() => setFiltroEstado("solicitudes")}
+          className="flex items-center gap-3 w-full text-left rounded-lg border border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/10 transition-colors p-3"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/15 text-orange-600 dark:text-orange-400 shrink-0">
+            <Inbox size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm">
+              Tenés {solicitudesCount} solicitud{solicitudesCount === 1 ? "" : "es"} pendiente{solicitudesCount === 1 ? "" : "s"} de revisión
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clickeá acá para ver turnos con eliminación o reprogramación solicitada
+            </p>
+          </div>
+        </button>
+      )}
 
       {loading ? (
         <LoadingState label="Cargando turnos..." />
@@ -208,8 +254,11 @@ export default function TurnosPage() {
                       <span className="text-xs text-muted-foreground">
                         {formatDateTime(t.fecha_hora)}
                       </span>
-                      <Badge variant={estadoVariant[t.estado]} className="capitalize">
-                        {t.estado}
+                      <Badge
+                        variant={estadoVariant[t.estado]}
+                        className={cn("border", estadoBadgeClass[t.estado])}
+                      >
+                        {ESTADO_LABELS[t.estado] ?? t.estado}
                       </Badge>
                     </div>
                   </CardContent>

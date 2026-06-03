@@ -4,7 +4,13 @@ export type NotificationKind =
   | "turno-rechazado"
   | "recordatorio"
   | "cirugia-editada"
-  | "cirugia-suspendida";
+  | "cirugia-suspendida"
+  | "solicitud-eliminacion"
+  | "eliminacion-aprobada"
+  | "eliminacion-rechazada"
+  | "solicitud-reprogramacion"
+  | "reprogramacion-confirmada"
+  | "reprogramacion-rechazada";
 
 export interface CambioEdit {
   campo: "fecha_hora" | "duracion_minutos" | "quirofano_id";
@@ -16,6 +22,7 @@ export interface NotifyOptions {
   turno_id: string;
   motivo?: string;
   cambios?: string[] | CambioEdit[];
+  fecha_propuesta?: string;
 }
 
 export async function notify(
