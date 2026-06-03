@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  let body: { turno_id?: string; motivo?: string; cambios?: string[] };
+  let body: { turno_id?: string; motivo?: string; cambios?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         result = await sendRecordatorio24hs(turno_id);
         break;
       case "edicion":
-        result = await sendCirugiaEditada(turno_id, cambios ?? []);
+        result = await sendCirugiaEditada(turno_id, (cambios ?? []) as never);
         break;
       case "suspension":
         result = await sendCirugiaSuspendida(turno_id);

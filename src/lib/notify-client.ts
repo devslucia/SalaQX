@@ -6,10 +6,16 @@ export type NotificationKind =
   | "cirugia-editada"
   | "cirugia-suspendida";
 
+export interface CambioEdit {
+  campo: "fecha_hora" | "duracion_minutos" | "quirofano_id";
+  anterior: string | number;
+  nuevo: string | number;
+}
+
 export interface NotifyOptions {
   turno_id: string;
   motivo?: string;
-  cambios?: string[];
+  cambios?: string[] | CambioEdit[];
 }
 
 export async function notify(

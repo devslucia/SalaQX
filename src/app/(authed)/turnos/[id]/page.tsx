@@ -159,19 +159,21 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
       const fechaHora = new Date(`${editForm.fecha}T${editForm.hora}:00`);
       const duracionTotal = parseInt(editForm.duracion_horas) * 60 + parseInt(editForm.duracion_minutos);
 
-      const cambios: string[] = [];
       const fechaAnterior = new Date(turno.fecha_hora);
+      const cambios: { campo: "fecha_hora" | "duracion_minutos"; anterior: string | number; nuevo: string | number }[] = [];
       if (fechaAnterior.toISOString() !== fechaHora.toISOString()) {
-        cambios.push(
-          `Fecha y hora: de ${fechaAnterior.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })} a ${fechaHora.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`,
-        );
+        cambios.push({
+          campo: "fecha_hora",
+          anterior: fechaAnterior.toISOString(),
+          nuevo: fechaHora.toISOString(),
+        });
       }
       if (turno.duracion_minutos !== duracionTotal) {
-        const fmt = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m`;
-        cambios.push(`Duración: de ${fmt(turno.duracion_minutos)} a ${fmt(duracionTotal)}`);
-      }
-      if (cambios.length === 0) {
-        cambios.push("Datos actualizados");
+        cambios.push({
+          campo: "duracion_minutos",
+          anterior: turno.duracion_minutos,
+          nuevo: duracionTotal,
+        });
       }
 
       await supabase.from("turnos").update({

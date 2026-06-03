@@ -2,8 +2,6 @@ import "server-only";
 import { Resend } from "resend";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { render } from "@react-email/components";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 
 import { TurnoConfirmadoEmail } from "@/emails/turno-confirmado";
 import { TurnoRechazadoEmail } from "@/emails/turno-rechazado";
@@ -11,6 +9,7 @@ import { TurnoRecordatorioEmail } from "@/emails/turno-recordatorio";
 import { TurnoEditadoEmail } from "@/emails/turno-editado";
 import { TurnoSuspendidoEmail } from "@/emails/turno-suspendido";
 import { NuevaSolicitudEmail } from "@/emails/nueva-solicitud";
+import { formatFechaArg, formatFechaCortaArg, formatHoraArg } from "@/lib/dates";
 
 export type NotificationTipo =
   | "nueva_solicitud"
@@ -93,15 +92,6 @@ export async function loadTurnoContext(turnoId: string): Promise<TurnoContext | 
     obraSocial: (osRes.data as TurnoContext["obraSocial"]) ?? null,
     tipoAnestesia: (taRes.data as TurnoContext["tipoAnestesia"]) ?? null,
   };
-}
-
-export function formatFechaHora(iso: string): string {
-  const d = new Date(iso);
-  return format(d, "EEEE d 'de' MMMM 'de' yyyy 'a las' HH:mm 'hs'", { locale: es });
-}
-
-export function formatFechaCorta(iso: string): string {
-  return format(new Date(iso), "dd/MM/yyyy 'a las' HH:mm 'hs'", { locale: es });
 }
 
 export function formatDuracion(minutos: number): string {
@@ -266,7 +256,7 @@ export async function sendTurnoConfirmado(turnoId: string): Promise<SendResult> 
 
   return sendOne({
     to: ctx.medico.email,
-    subject: `Turno confirmado — ${formatFechaCorta(ctx.turno.fecha_hora)}`,
+    subject: `Turno confirmado — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
     react: TurnoConfirmadoEmail({
       destinatarioNombre: ctx.medico.nombre,
       paciente: ctx.turno,
@@ -292,7 +282,7 @@ export async function sendTurnoRechazado(
 
   return sendOne({
     to: ctx.medico.email,
-    subject: `Turno rechazado — ${formatFechaCorta(ctx.turno.fecha_hora)}`,
+    subject: `Turno rechazado — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
     react: TurnoRechazadoEmail({
       destinatarioNombre: ctx.medico.nombre,
       paciente: ctx.turno,
@@ -312,7 +302,7 @@ export async function sendRecordatorio24hs(turnoId: string): Promise<SendResult>
 
   return sendOne({
     to: ctx.medico.email,
-    subject: `Recordatorio — Cirugía mañana a las ${format(new Date(ctx.turno.fecha_hora), "HH:mm", { locale: es })} hs`,
+    subject: `Recordatorio — Cirugía mañana a las ${formatHoraArg(ctx.turno.fecha_hora)} hs`,
     react: TurnoRecordatorioEmail({
       destinatarioNombre: ctx.medico.nombre,
       paciente: ctx.turno,
@@ -325,19 +315,43 @@ export async function sendRecordatorio24hs(turnoId: string): Promise<SendResult>
   });
 }
 
+export interface CambioEdit {
+  campo: "fecha_hora" | "duracion_minutos" | "quirofano_id";
+  anterior: string | number;
+  nuevo: string | number;
+}
+
 export async function sendCirugiaEditada(
   turnoId: string,
-  cambios: string[],
+  cambiosIn: string[] | CambioEdit[],
 ): Promise<SendResult> {
   const ctx = await loadTurnoContext(turnoId);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
+  const cambios: string[] = (cambiosIn ?? []).map((c) => {
+    if (typeof c === "string") return c;
+    switch (c.campo) {
+      case "fecha_hora":
+        return `Fecha y hora: de ${formatFechaArg(c.anterior as string)} a ${formatFechaArg(c.nuevo as string)}`;
+      case "duracion_minutos":
+        return `Duración: de ${formatDuracion(c.anterior as number)} a ${formatDuracion(c.nuevo as number)}`;
+      case "quirofano_id":
+        return `Quirófano: de ${c.anterior} a ${c.nuevo}`;
+      default:
+        return `${c.campo}: ${c.anterior} → ${c.nuevo}`;
+    }
+  });
+
+  if (cambios.length === 0) {
+    cambios.push("Datos actualizados");
+  }
+
   const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
 
   return sendOne({
     to: ctx.medico.email,
-    subject: `Tu cirugía fue modificada — ${formatFechaCorta(ctx.turno.fecha_hora)}`,
+    subject: `Tu cirugía fue modificada — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
     react: TurnoEditadoEmail({
       destinatarioNombre: ctx.medico.nombre,
       paciente: ctx.turno,
@@ -359,7 +373,7 @@ export async function sendCirugiaSuspendida(turnoId: string): Promise<SendResult
 
   return sendOne({
     to: ctx.medico.email,
-    subject: `Cirugía suspendida — ${formatFechaCorta(ctx.turno.fecha_hora)}`,
+    subject: `Cirugía suspendida — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
     react: TurnoSuspendidoEmail({
       destinatarioNombre: ctx.medico.nombre,
       paciente: ctx.turno,

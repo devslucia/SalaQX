@@ -6,6 +6,7 @@ import {
   DetailRow,
   Paragraph,
 } from "./layout";
+import { formatFechaArg, formatHoraArg } from "@/lib/dates";
 
 interface TurnoRecordatorioEmailProps {
   destinatarioNombre: string;
@@ -17,19 +18,8 @@ interface TurnoRecordatorioEmailProps {
 }
 
 export function TurnoRecordatorioEmail(props: TurnoRecordatorioEmailProps) {
-  const fechaFmt = new Date(props.fechaHora).toLocaleString("es-AR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const horaCorta = new Date(props.fechaHora).toLocaleTimeString("es-AR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const fechaFmt = formatFechaArg(props.fechaHora);
+  const horaCorta = formatHoraArg(props.fechaHora);
 
   return (
     <EmailLayout

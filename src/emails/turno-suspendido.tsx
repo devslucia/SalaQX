@@ -6,6 +6,7 @@ import {
   DetailRow,
   Paragraph,
 } from "./layout";
+import { formatFechaArg } from "@/lib/dates";
 
 interface TurnoSuspendidoEmailProps {
   destinatarioNombre: string;
@@ -15,14 +16,7 @@ interface TurnoSuspendidoEmailProps {
 }
 
 export function TurnoSuspendidoEmail(props: TurnoSuspendidoEmailProps) {
-  const fechaFmt = new Date(props.fechaHora).toLocaleString("es-AR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const fechaFmt = formatFechaArg(props.fechaHora);
 
   return (
     <EmailLayout
