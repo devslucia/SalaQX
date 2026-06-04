@@ -1,6 +1,7 @@
 export type NotificationKind =
   | "nueva-solicitud"
   | "turno-confirmado"
+  | "turno-confirmado-con-cambio"
   | "turno-rechazado"
   | "recordatorio"
   | "cirugia-editada"
@@ -23,6 +24,7 @@ export interface NotifyOptions {
   motivo?: string;
   cambios?: string[] | CambioEdit[];
   fecha_propuesta?: string;
+  fecha_hora_anterior?: string;
 }
 
 export async function notify(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   sendNuevaSolicitud,
   sendTurnoConfirmado,
+  sendTurnoConfirmadoConCambio,
   sendTurnoRechazado,
   sendRecordatorio24hs,
   sendCirugiaEditada,
@@ -26,6 +27,7 @@ interface RouteParams {
 const VALID_TIPOS: NotificationTipo[] = [
   "nueva_solicitud",
   "confirmacion",
+  "confirmacion_con_cambio",
   "rechazo",
   "recordatorio",
   "edicion",
@@ -44,6 +46,9 @@ function normalizarTipo(t: string): NotificationTipo | null {
     "nueva_solicitud": "nueva_solicitud",
     "turno-confirmado": "confirmacion",
     "confirmacion": "confirmacion",
+    "turno-confirmado-con-cambio": "confirmacion_con_cambio",
+    "confirmacion-con-cambio": "confirmacion_con_cambio",
+    "confirmacion_con_cambio": "confirmacion_con_cambio",
     "turno-rechazado": "rechazo",
     "rechazo": "rechazo",
     "recordatorio": "recordatorio",
@@ -84,6 +89,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     motivo?: string;
     cambios?: unknown;
     fecha_propuesta?: string;
+    fecha_hora_anterior?: string;
   };
   try {
     body = await request.json();
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  const { turno_id, motivo, cambios, fecha_propuesta } = body;
+  const { turno_id, motivo, cambios, fecha_propuesta, fecha_hora_anterior } = body;
   if (!turno_id) {
     return NextResponse.json({ error: "turno_id es requerido" }, { status: 400 });
   }
@@ -116,6 +122,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         break;
       case "confirmacion":
         result = await sendTurnoConfirmado(turno_id);
+        break;
+      case "confirmacion_con_cambio":
+        if (!fecha_hora_anterior) {
+          return NextResponse.json(
+            { error: "fecha_hora_anterior es requerida" },
+            { status: 400 },
+          );
+        }
+        result = await sendTurnoConfirmadoConCambio(turno_id, fecha_hora_anterior);
         break;
       case "rechazo":
         result = await sendTurnoRechazado(turno_id, motivo ?? "Sin motivo especificado");

@@ -12,10 +12,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ESTADO_BORDER_COLORS, ESTADO_LABELS, type Turno, type Quirofano, type EstadoTurno } from "@/lib/types";
-import { formatDateTime, cn } from "@/lib/utils";
+import { formatDateTime, formatTime, cn } from "@/lib/utils";
 import { notify } from "@/lib/notify-client";
+import { detectarConflictos, detectarConflictosTodosLosQuirofanos, type ConflictoInfo } from "@/lib/turnos-conflict";
 import {
   ArrowLeft, CheckCircle, XCircle, Pause, Trash2, Pencil, User, Phone, Clock, Building2,
   Stethoscope, Syringe, Heart, Hash, FileText, MessageSquareWarning, CalendarClock, AlertTriangle,
@@ -61,6 +62,16 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
   const [asignarReprogOpen, setAsignarReprogOpen] = useState(false);
   const [asignarReprogForm, setAsignarReprogForm] = useState({ fecha: "", hora: "" });
 
+  const [disponibilidadPorQuirofano, setDisponibilidadPorQuirofano] = useState<Map<string, ConflictoInfo[]>>(new Map());
+  const [disponibilidadLoading, setDisponibilidadLoading] = useState(false);
+  const [conflictoDetectado, setConflictoDetectado] = useState<ConflictoInfo[] | null>(null);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [reassignTimeModalOpen, setReassignTimeModalOpen] = useState(false);
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("");
+  const [reassignError, setReassignError] = useState("");
+  const [reassignLoading, setReassignLoading] = useState(false);
+
   const fetchTurno = async () => {
     const { data } = await supabase.from("turnos").select("*").eq("id", id).single();
     if (data) {
@@ -93,10 +104,40 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
     fetchQuirofanos();
   }, [id]);
 
+  const loadDisponibilidad = async () => {
+    if (!turno) return;
+    setDisponibilidadLoading(true);
+    try {
+      const map = await detectarConflictosTodosLosQuirofanos(
+        supabase,
+        new Date(turno.fecha_hora),
+        turno.duracion_minutos,
+        turno.id,
+        quirofanos.map((q) => q.id),
+      );
+      setDisponibilidadPorQuirofano(map);
+    } catch (e) {
+      console.error("[loadDisponibilidad] error:", e);
+    }
+    setDisponibilidadLoading(false);
+  };
+
   const handleConfirm = async () => {
     if (!selectedQuirofano || !turno) return;
     setActionLoading(true);
     try {
+      const conflictos = await detectarConflictos(
+        supabase,
+        selectedQuirofano,
+        new Date(turno.fecha_hora),
+        turno.duracion_minutos,
+        turno.id,
+      );
+      if (conflictos.length > 0) {
+        setConflictoDetectado(conflictos);
+        setConflictModalOpen(true);
+        return;
+      }
       const { error } = await supabase
         .from("turnos")
         .update({ estado: "confirmada", quirofano_id: selectedQuirofano })
@@ -105,11 +146,67 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
       void notify("turno-confirmado", { turno_id: turno.id });
       toast.success("Turno confirmado", { description: "Se notificó al médico por email" });
       setConfirmDialogOpen(false);
+      setSelectedQuirofano("");
       fetchTurno();
-    } catch (e: any) {
-      toast.error("Error al confirmar", { description: e.message });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error("Error al confirmar", { description: message });
     }
     setActionLoading(false);
+  };
+
+  const handleReassignTime = async () => {
+    if (!newDate || !newTime || !turno || !selectedQuirofano) return;
+    setReassignLoading(true);
+    setReassignError("");
+    try {
+      const nuevaFechaHora = new Date(`${newDate}T${newTime}:00`);
+      if (Number.isNaN(nuevaFechaHora.getTime())) {
+        setReassignError("Fecha u hora inválida");
+        setReassignLoading(false);
+        return;
+      }
+      const conflictos = await detectarConflictos(
+        supabase,
+        selectedQuirofano,
+        nuevaFechaHora,
+        turno.duracion_minutos,
+        turno.id,
+      );
+      if (conflictos.length > 0) {
+        setReassignError(
+          "Ese horario también está ocupado en el quirófano seleccionado. Elegí otro.",
+        );
+        return;
+      }
+      const fechaAnterior = turno.fecha_hora;
+      const { error } = await supabase
+        .from("turnos")
+        .update({
+          estado: "confirmada",
+          quirofano_id: selectedQuirofano,
+          fecha_hora: nuevaFechaHora.toISOString(),
+        })
+        .eq("id", turno.id);
+      if (error) throw error;
+      void notify("turno-confirmado-con-cambio", {
+        turno_id: turno.id,
+        fecha_hora_anterior: fechaAnterior,
+      });
+      toast.success("Turno confirmado con horario modificado", {
+        description: "Se notificó al médico por email",
+      });
+      setReassignTimeModalOpen(false);
+      setConfirmDialogOpen(false);
+      setSelectedQuirofano("");
+      setNewDate("");
+      setNewTime("");
+      fetchTurno();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setReassignError(message);
+    }
+    setReassignLoading(false);
   };
 
   const handleReject = async () => {
@@ -580,6 +677,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
                   onClick={() => {
                     setSelectedQuirofano("");
                     setConfirmDialogOpen(true);
+                    void loadDisponibilidad();
                   }}
                 >
                   <CheckCircle size={16} /> Confirmar
@@ -673,28 +771,103 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* Confirm Dialog */}
       <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <DialogContent onClose={() => setConfirmDialogOpen(false)}>
+        <DialogContent onClose={() => setConfirmDialogOpen(false)} className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Confirmar Turno</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <DialogDescription>
               Asigná el quirófano para el turno de <strong>{turno.paciente_nombre}</strong> el{" "}
               <strong>{formatDateTime(turno.fecha_hora)}</strong>
-            </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>Quirófano</Label>
-              <Select value={selectedQuirofano} onChange={(e) => setSelectedQuirofano(e.target.value)}>
-                <option value="">Seleccionar quirófano...</option>
-                {quirofanos.map((q) => (
-                  <option key={q.id} value={q.id}>{q.nombre}</option>
-                ))}
-              </Select>
+              {disponibilidadLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="spinner h-3 w-3" />
+                  Verificando disponibilidad...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {quirofanos.map((q) => {
+                    const conflictos = disponibilidadPorQuirofano.get(q.id) ?? [];
+                    const libre = conflictos.length === 0;
+                    const seleccionado = selectedQuirofano === q.id;
+                    const tooltipText = libre
+                      ? `Quirófano libre · click para seleccionar`
+                      : conflictos
+                          .map((c) => {
+                            const ini = new Date(c.fecha_hora);
+                            const fin = new Date(
+                              ini.getTime() + c.duracion_minutos * 60_000,
+                            );
+                            return `Ocupado ${formatTime(ini)}-${formatTime(fin)} · ${c.paciente_nombre}${c.medico ? ` · ${c.medico.nombre}` : ""}`;
+                          })
+                          .join("\n");
+                    return (
+                      <button
+                        key={q.id}
+                        type="button"
+                        disabled={!libre}
+                        onClick={() => libre && setSelectedQuirofano(q.id)}
+                        title={tooltipText}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border-2 p-3 text-left text-sm transition-colors",
+                          seleccionado
+                            ? "border-success bg-success/10 ring-2 ring-success/30"
+                            : libre
+                              ? "border-success/40 bg-success/5 hover:border-success hover:bg-success/10 cursor-pointer"
+                              : "border-destructive/40 bg-destructive/5 opacity-60 cursor-not-allowed",
+                        )}
+                      >
+                        {libre ? (
+                          <CheckCircle
+                            size={18}
+                            className="text-success shrink-0"
+                            aria-hidden
+                          />
+                        ) : (
+                          <AlertTriangle
+                            size={18}
+                            className="text-destructive shrink-0"
+                            aria-hidden
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{q.nombre}</p>
+                          <p
+                            className={cn(
+                              "text-xs",
+                              libre ? "text-success" : "text-destructive",
+                            )}
+                          >
+                            {libre
+                              ? "Libre en este horario"
+                              : `Ocupado · ${conflictos.length} conflicto${conflictos.length === 1 ? "" : "s"}`}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>Cancelar</Button>
-            <Button variant="success" onClick={handleConfirm} disabled={!selectedQuirofano || actionLoading}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmDialogOpen(false);
+                setSelectedQuirofano("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="success"
+              onClick={handleConfirm}
+              disabled={!selectedQuirofano || actionLoading || disponibilidadLoading}
+            >
               {actionLoading ? "Confirmando..." : "Confirmar Turno"}
             </Button>
           </DialogFooter>
@@ -966,6 +1139,144 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             <Button variant="destructive" onClick={handleRechazarReprogramacion}
               disabled={!rechazoReprogMotivo.trim() || actionLoading}>
               {actionLoading ? "Rechazando..." : "Rechazar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conflict warning modal (encargada forced confirmation with conflict) */}
+      <Dialog open={conflictModalOpen} onOpenChange={setConflictModalOpen}>
+        <DialogContent onClose={() => setConflictModalOpen(false)} className="max-w-lg">
+          <DialogHeader>
+            <div className="mx-auto sm:mx-0 mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
+              <AlertTriangle className="h-6 w-6 text-warning" aria-hidden />
+            </div>
+            <DialogTitle>
+              Conflicto de horario en {quirofanos.find((q) => q.id === selectedQuirofano)?.nombre ?? "el quirófano"}
+            </DialogTitle>
+            <DialogDescription>
+              Ya existe una cirugía agendada en ese quirófano que se superpone con este turno.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {conflictoDetectado?.map((c) => {
+              const ini = new Date(c.fecha_hora);
+              const fin = new Date(ini.getTime() + c.duracion_minutos * 60_000);
+              return (
+                <Card key={c.id} className="border-l-4 border-l-destructive">
+                  <CardContent className="p-3 space-y-1 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Paciente:</span>{" "}
+                      <strong>{c.paciente_nombre}</strong>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Tipo de cirugía:</span>{" "}
+                      <strong>{c.tipo_cirugia}</strong>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Horario:</span>{" "}
+                      <strong>
+                        {formatTime(ini)} - {formatTime(fin)}
+                      </strong>
+                    </p>
+                    {c.medico && (
+                      <p>
+                        <span className="text-muted-foreground">Médico:</span>{" "}
+                        <strong>{c.medico.nombre}</strong>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          <p className="text-sm text-muted-foreground">¿Qué querés hacer?</p>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConflictModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                setConflictModalOpen(false);
+                setSelectedQuirofano("");
+                await loadDisponibilidad();
+              }}
+            >
+              Cambiar quirófano
+            </Button>
+            <Button
+              variant="warning"
+              onClick={() => {
+                setConflictModalOpen(false);
+                const fh = new Date(turno.fecha_hora);
+                setNewDate(fh.toISOString().split("T")[0]);
+                setNewTime(
+                  `${String(fh.getHours()).padStart(2, "0")}:${String(fh.getMinutes()).padStart(2, "0")}`,
+                );
+                setReassignError("");
+                setReassignTimeModalOpen(true);
+              }}
+            >
+              Cambiar horario al médico
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign time modal (cambiar horario al médico) */}
+      <Dialog open={reassignTimeModalOpen} onOpenChange={setReassignTimeModalOpen}>
+        <DialogContent onClose={() => setReassignTimeModalOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Cambiar horario al médico</DialogTitle>
+            <DialogDescription>
+              Proponé un nuevo horario para el turno de <strong>{turno.paciente_nombre}</strong>{" "}
+              en <strong>{quirofanos.find((q) => q.id === selectedQuirofano)?.nombre ?? "el quirófano"}</strong>.
+              La duración ({turno.duracion_minutos} min) se mantiene. El médico será notificado del cambio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Nueva fecha</Label>
+                <Input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nueva hora</Label>
+                <Input
+                  type="time"
+                  value={newTime}
+                  onChange={(e) => setNewTime(e.target.value)}
+                />
+              </div>
+            </div>
+            {reassignError && (
+              <Alert variant="destructive">
+                <AlertTriangle size={16} />
+                <AlertDescription>{reassignError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReassignTimeModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="warning"
+              onClick={handleReassignTime}
+              disabled={!newDate || !newTime || reassignLoading}
+            >
+              {reassignLoading ? "Guardando..." : "Confirmar con nuevo horario"}
             </Button>
           </DialogFooter>
         </DialogContent>

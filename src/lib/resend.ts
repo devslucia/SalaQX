@@ -15,11 +15,13 @@ import { EliminacionRechazadaEmail } from "@/emails/eliminacion-rechazada";
 import { SolicitudReprogramacionEmail } from "@/emails/solicitud-reprogramacion";
 import { ReprogramacionConfirmadaEmail } from "@/emails/reprogramacion-confirmada";
 import { ReprogramacionRechazadaEmail } from "@/emails/reprogramacion-rechazada";
+import { TurnoConfirmadoConCambioEmail } from "@/emails/turno-confirmado-con-cambio";
 import { formatFechaArg, formatFechaCortaArg, formatHoraArg } from "@/lib/dates";
 
 export type NotificationTipo =
   | "nueva_solicitud"
   | "confirmacion"
+  | "confirmacion_con_cambio"
   | "rechazo"
   | "recordatorio"
   | "edicion"
@@ -246,6 +248,35 @@ export async function sendTurnoConfirmado(turnoId: string): Promise<SendResult> 
       turnoUrl,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "confirmacion" },
+  });
+}
+
+export async function sendTurnoConfirmadoConCambio(
+  turnoId: string,
+  fechaHoraAnterior: string,
+): Promise<SendResult> {
+  const ctx = await loadTurnoContext(turnoId);
+  if (!ctx) return { ok: false, error: "turno not found" };
+  if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
+  if (!ctx.quirofano) return { ok: false, error: "quirofano not assigned" };
+
+  return sendOne({
+    to: ctx.medico.email,
+    subject: `Turno confirmado con horario modificado — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
+    react: TurnoConfirmadoConCambioEmail({
+      destinatarioNombre: ctx.medico.nombre,
+      pacienteNombre: ctx.turno.paciente_nombre,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaHoraAnterior,
+      fechaHoraNueva: ctx.turno.fecha_hora,
+      quirofanoNombre: ctx.quirofano.nombre,
+      motivo: "el quirófano no tenía disponibilidad en tu horario solicitado",
+    }),
+    log: {
+      turnoId,
+      destinatarioId: ctx.medico.id,
+      tipo: "confirmacion_con_cambio",
+    },
   });
 }
 
