@@ -15,10 +15,6 @@ alter table public.turnos
   add column if not exists solicitud_rechazo_at timestamptz,
   add column if not exists solicitud_rechazo_por uuid references public.users(id);
 
-create index if not exists idx_turnos_estado_solicitud
-  on public.turnos (estado)
-  where estado in ('solicitud_eliminacion', 'solicitud_reprogramacion');
-
 -- RLS existente (turnos_update) ya permite al médico actualizar su propio
 -- turno, lo que cubre el cambio de estado a solicitud_*. No hace falta
 -- cambiar políticas.
