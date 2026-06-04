@@ -29,6 +29,14 @@ export interface Quirofano {
   created_at: string;
 }
 
+export interface TurnoOcupado {
+  id: string;
+  fecha_hora: string;
+  duracion_minutos: number;
+  quirofano_id: string | null;
+  estado: EstadoTurno;
+}
+
 export interface HorarioHabilitado {
   id: string;
   quirofano_id: string;

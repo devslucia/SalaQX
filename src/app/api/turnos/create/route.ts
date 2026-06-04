@@ -148,6 +148,68 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const nuevoInicio = fechaHora;
+    const nuevoFin = new Date(nuevoInicio.getTime() + payload.duracion_minutos * 60_000);
+    const diaInicio = new Date(nuevoInicio);
+    diaInicio.setHours(0, 0, 0, 0);
+    const diaFin = new Date(nuevoInicio);
+    diaFin.setHours(23, 59, 59, 999);
+
+    const { data: quirofanosActivos, error: quirofanosError } = await supabase
+      .from("quirofanos")
+      .select("id")
+      .eq("activo", true);
+
+    if (quirofanosError) {
+      console.error("[POST /api/turnos/create] quirofanos error:", quirofanosError);
+      return NextResponse.json(
+        { error: "No se pudieron cargar los quirófanos" },
+        { status: 500 },
+      );
+    }
+
+    if (quirofanosActivos && quirofanosActivos.length > 0) {
+      const { data: turnosDelDia, error: turnosDelDiaError } = await supabase
+        .from("turnos")
+        .select("id, fecha_hora, duracion_minutos, quirofano_id, estado")
+        .in("estado", ["confirmada", "pendiente", "solicitud_reprogramacion"])
+        .gte("fecha_hora", diaInicio.toISOString())
+        .lte("fecha_hora", diaFin.toISOString());
+
+      if (turnosDelDiaError) {
+        console.error(
+          "[POST /api/turnos/create] turnos del día error:",
+          turnosDelDiaError,
+        );
+        return NextResponse.json(
+          { error: "No se pudieron validar los turnos del día" },
+          { status: 500 },
+        );
+      }
+
+      const hayConflicto = (quirofanoId: string): boolean => {
+        if (!turnosDelDia) return false;
+        return turnosDelDia
+          .filter((t) => t.quirofano_id === quirofanoId)
+          .some((t) => {
+            const tInicio = new Date(t.fecha_hora);
+            const tFin = new Date(tInicio.getTime() + t.duracion_minutos * 60_000);
+            return nuevoInicio < tFin && nuevoFin > tInicio;
+          });
+      };
+
+      const quirofanosLibres = quirofanosActivos.filter(
+        (q) => !hayConflicto(q.id),
+      );
+
+      if (quirofanosLibres.length === 0) {
+        return NextResponse.json(
+          { error: "El horario seleccionado ya fue tomado. Elegí otro." },
+          { status: 400 },
+        );
+      }
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from("turnos")
       .insert({

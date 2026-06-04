@@ -11,8 +11,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Calendar } from "@/components/ui/calendar";
 import {
-  User, Stethoscope, Clock, AlertTriangle, Info, ArrowRight,
+  User, Stethoscope, Clock, AlertTriangle, Info, ArrowRight, Lock,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   DIAS_SEMANA,
   type DiaSemana,
@@ -20,6 +21,8 @@ import {
   type TipoAnestesia,
   type HorarioHabilitado,
   type ConfigUTI,
+  type Quirofano,
+  type TurnoOcupado,
   type User as AuthUser,
 } from "@/lib/types";
 import { format, getDay, parseISO, isBefore, startOfDay } from "date-fns";
@@ -48,6 +51,10 @@ export function SolicitarTurnoForm({
   const [tiposAnestesia, setTiposAnestesia] = useState<TipoAnestesia[]>([]);
   const [horarios, setHorarios] = useState<HorarioHabilitado[]>([]);
   const [configUTI, setConfigUTI] = useState<ConfigUTI | null>(null);
+  const [quirofanos, setQuirofanos] = useState<Quirofano[]>([]);
+  const [turnosDelDia, setTurnosDelDia] = useState<TurnoOcupado[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotInvalidoPorDuracion, setSlotInvalidoPorDuracion] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -70,20 +77,137 @@ export function SolicitarTurnoForm({
 
   useEffect(() => {
     const fetchData = async () => {
-      const [os, ta, h, uti] = await Promise.all([
+      const [os, ta, h, uti, q] = await Promise.all([
         supabase.from("obras_sociales").select("*").eq("activo", true).order("nombre"),
         supabase.from("tipos_anestesia").select("*").eq("activo", true).order("nombre"),
         supabase.from("horarios_habilitados").select("*"),
         supabase.from("config_uti").select("*").order("updated_at", { ascending: false }).limit(1).single(),
+        supabase.from("quirofanos").select("*").eq("activo", true).order("nombre"),
       ]);
       if (os.data) setObrasSociales(os.data);
       if (ta.data) setTiposAnestesia(ta.data);
       if (h.data) setHorarios(h.data);
       if (uti.data) setConfigUTI(uti.data);
+      if (q.data) setQuirofanos(q.data);
       setLoading(false);
     };
     fetchData();
   }, []);
+
+  const slotsOcupadosPorQuirofano = (
+    turnos: TurnoOcupado[],
+    quirofanoId: string,
+  ): { inicio: Date; fin: Date }[] =>
+    turnos
+      .filter((t) => t.quirofano_id === quirofanoId)
+      .map((t) => ({
+        inicio: new Date(t.fecha_hora),
+        fin: new Date(new Date(t.fecha_hora).getTime() + t.duracion_minutos * 60_000),
+      }));
+
+  const overlaps = (
+    aInicio: Date,
+    aFin: Date,
+    bInicio: Date,
+    bFin: Date,
+  ): boolean => aInicio < bFin && aFin > bInicio;
+
+  type SlotInfo = {
+    hora: string;
+    inicio: Date;
+    fin: Date;
+    disponible: boolean;
+    quirofanosLibres: number;
+    quirofanosTotales: number;
+  };
+
+  const getSlots = (dateStr: string, duracionMin: number): SlotInfo[] => {
+    if (!dateStr || duracionMin <= 0) return [];
+    const date = parseISO(dateStr);
+    const dayOfWeek = getDay(date) as DiaSemana;
+
+    const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
+    if (applicableHorarios.length === 0) return [];
+
+    const result: SlotInfo[] = [];
+    const quirofanosActivos = quirofanos;
+
+    for (const h of applicableHorarios) {
+      const [startH, startM] = h.hora_inicio.split(":").map(Number);
+      const [endH, endM] = h.hora_fin.split(":").map(Number);
+      let current = startH * 60 + startM;
+      const end = endH * 60 + endM;
+
+      while (current + duracionMin <= end) {
+        const hh = String(Math.floor(current / 60)).padStart(2, "0");
+        const mm = String(current % 60).padStart(2, "0");
+        const slotInicio = new Date(date);
+        slotInicio.setHours(Math.floor(current / 60), current % 60, 0, 0);
+        const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
+
+        let libres = 0;
+        if (quirofanosActivos.length === 0) {
+          libres = 1;
+        } else {
+          for (const q of quirofanosActivos) {
+            const bloques = slotsOcupadosPorQuirofano(turnosDelDia, q.id);
+            const choca = bloques.some((b) =>
+              overlaps(slotInicio, slotFin, b.inicio, b.fin),
+            );
+            if (!choca) libres += 1;
+          }
+        }
+
+        result.push({
+          hora: `${hh}:${mm}`,
+          inicio: slotInicio,
+          fin: slotFin,
+          disponible: libres > 0,
+          quirofanosLibres: libres,
+          quirofanosTotales: quirofanosActivos.length,
+        });
+        current += 30;
+      }
+    }
+
+    return result;
+  };
+
+  useEffect(() => {
+    if (!form.fecha) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTurnosDelDia([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchTurnosDelDia = async () => {
+       
+      setSlotsLoading(true);
+      const inicio = new Date(`${form.fecha}T00:00:00`);
+      const fin = new Date(`${form.fecha}T23:59:59`);
+      const { data, error: qErr } = await supabase
+        .from("turnos")
+        .select("id, fecha_hora, duracion_minutos, quirofano_id, estado")
+        .in("estado", ["confirmada", "pendiente", "solicitud_reprogramacion"])
+        .gte("fecha_hora", inicio.toISOString())
+        .lte("fecha_hora", fin.toISOString());
+      if (cancelled) return;
+      if (qErr) {
+        console.error("[SolicitarTurnoForm] turnos del día error:", qErr);
+         
+        setTurnosDelDia([]);
+      } else {
+         
+        setTurnosDelDia((data ?? []) as TurnoOcupado[]);
+      }
+       
+      setSlotsLoading(false);
+    };
+    fetchTurnosDelDia();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.fecha, supabase]);
 
   useEffect(() => {
     if (user?.telefono && !form.medico_telefono) {
@@ -91,31 +215,31 @@ export function SolicitarTurnoForm({
     }
   }, [user]);
 
-  const getAvailableSlots = (dateStr: string): string[] => {
-    if (!dateStr) return [];
-    const date = parseISO(dateStr);
-    const dayOfWeek = getDay(date) as DiaSemana;
-
-    const slots: string[] = [];
-    const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
-
-    for (const h of applicableHorarios) {
-      const [startH, startM] = h.hora_inicio.split(":").map(Number);
-      const [endH, endM] = h.hora_fin.split(":").map(Number);
-      let current = startH * 60 + startM;
-      const end = endH * 60 + endM;
-      const duracionMin = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
-
-      while (current + duracionMin <= end) {
-        const hh = String(Math.floor(current / 60)).padStart(2, "0");
-        const mm = String(current % 60).padStart(2, "0");
-        slots.push(`${hh}:${mm}`);
-        current += 30;
-      }
+  useEffect(() => {
+    if (!form.fecha || !form.hora) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSlotInvalidoPorDuracion(false);
+      return;
     }
-
-    return slots;
-  };
+    const duracionMin = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
+    if (duracionMin <= 0) {
+      setForm((f) => (f.hora ? { ...f, hora: "" } : f));
+       
+      setSlotInvalidoPorDuracion(false);
+      return;
+    }
+    const slots = getSlots(form.fecha, duracionMin);
+    const slot = slots.find((s) => s.hora === form.hora);
+    if (!slot || !slot.disponible) {
+      setForm((f) => (f.hora ? { ...f, hora: "" } : f));
+       
+      setSlotInvalidoPorDuracion(true);
+    } else {
+       
+      setSlotInvalidoPorDuracion(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.duracion_horas, form.duracion_minutos, form.fecha, turnosDelDia, quirofanos]);
 
   const isUTIDayAllowed = (dateStr: string): boolean => {
     if (!form.pasa_uti || !configUTI) return true;
@@ -245,8 +369,8 @@ export function SolicitarTurnoForm({
     );
   }
 
-  const availableSlots = getAvailableSlots(form.fecha);
   const duracionTotal = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
+  const slotsDelDia = form.fecha && duracionTotal > 0 ? getSlots(form.fecha, duracionTotal) : [];
   const fechaInvalida = form.fecha && !isUTIDayAllowed(form.fecha) && form.pasa_uti;
 
   return (
@@ -502,19 +626,75 @@ export function SolicitarTurnoForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="hora">Hora *</Label>
-              <Select
-                id="hora"
-                value={form.hora}
-                onChange={(e) => setForm({ ...form, hora: e.target.value })}
-                required
-              >
-                <option value="">Seleccionar horario...</option>
-                {availableSlots.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </Select>
-              {form.fecha && availableSlots.length === 0 && (
-                <p className="text-xs text-destructive">No hay horarios disponibles para esta fecha</p>
+              {!form.fecha ? (
+                <p className="text-xs text-muted-foreground">
+                  Elegí primero una fecha para ver los horarios disponibles.
+                </p>
+              ) : duracionTotal <= 0 ? (
+                <Alert variant="warning">
+                  <Info size={16} />
+                  <AlertDescription>
+                    Ingresá primero la duración estimada para ver los horarios disponibles.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <>
+                  {slotsLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="spinner h-3 w-3" />
+                      Cargando horarios…
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        {slotsDelDia.filter((s) => s.disponible).length} libres de {slotsDelDia.length} slots
+                        {quirofanos.length > 0 && (
+                          <> · {quirofanos.length} quirófano{quirofanos.length === 1 ? "" : "s"}</>
+                        )}
+                      </p>
+                      {slotsDelDia.length === 0 ? (
+                        <Alert variant="destructive">
+                          <AlertTriangle size={16} />
+                          <AlertDescription>
+                            No hay horarios disponibles para esta fecha y duración.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
+                          {slotsDelDia.map((s) => {
+                            const seleccionado = form.hora === s.hora;
+                            return (
+                              <button
+                                key={s.hora}
+                                type="button"
+                                disabled={!s.disponible}
+                                onClick={() => setForm({ ...form, hora: s.hora })}
+                                title={
+                                  !s.disponible
+                                    ? "Horario ocupado"
+                                    : s.quirofanosTotales > 1
+                                      ? `${s.quirofanosLibres} de ${s.quirofanosTotales} quirófanos libres`
+                                      : undefined
+                                }
+                                className={cn(
+                                  "inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-sm font-medium transition-colors",
+                                  seleccionado
+                                    ? "bg-[#1B4F72] dark:bg-[#2E86C1] text-white border-[#1B4F72] dark:border-[#2E86C1] hover:bg-[#154360] dark:hover:bg-[#1B4F72]"
+                                    : s.disponible
+                                      ? "border-input bg-background hover:bg-[#1B4F72] hover:text-white hover:border-[#1B4F72] dark:hover:bg-[#2E86C1] dark:hover:border-[#2E86C1] cursor-pointer"
+                                      : "opacity-30 cursor-not-allowed text-[#8B949E] border-input bg-background line-through",
+                                )}
+                              >
+                                {!s.disponible && <Lock size={12} aria-hidden />}
+                                {s.hora}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -524,6 +704,14 @@ export function SolicitarTurnoForm({
               <AlertTriangle size={16} />
               <AlertDescription>
                 Esta fecha no está habilitada para pacientes que van a UTI. Elegí un día permitido.
+              </AlertDescription>
+            </Alert>
+          )}
+          {slotInvalidoPorDuracion && (
+            <Alert variant="warning">
+              <Info size={16} />
+              <AlertDescription>
+                El horario seleccionado ya no está disponible para esa duración, elegí otro.
               </AlertDescription>
             </Alert>
           )}

@@ -408,3 +408,21 @@ body {
 .dark .calendario-wrapper.medico-can-create .fc-timegrid-slot:hover {
   background: rgba(30, 132, 73, 0.18);
 }
+
+/* ---- Days with blocking bookings ---- */
+.calendario-wrapper .fc-daygrid-day.day-with-bookings,
+.calendario-wrapper .fc-timegrid-col.day-with-bookings {
+  background: rgba(139, 148, 158, 0.08);
+}
+.calendario-wrapper .fc-daygrid-day.day-with-bookings:hover,
+.calendario-wrapper .fc-timegrid-col.day-with-bookings:hover {
+  background: rgba(139, 148, 158, 0.14);
+}
+.dark .calendario-wrapper .fc-daygrid-day.day-with-bookings,
+.dark .calendario-wrapper .fc-timegrid-col.day-with-bookings {
+  background: rgba(139, 148, 158, 0.14);
+}
+.dark .calendario-wrapper .fc-daygrid-day.day-with-bookings:hover,
+.dark .calendario-wrapper .fc-timegrid-col.day-with-bookings:hover {
+  background: rgba(139, 148, 158, 0.22);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -29,6 +29,13 @@ import {
 } from "@/lib/types";
 import { SolicitarTurnoForm } from "@/components/solicitar-turno-form";
 import { ESTADO_BADGE_COLORS, ESTADO_LABELS } from "@/lib/calendar";
+import { isBefore, isSameDay, startOfDay } from "date-fns";
+
+const ESTADOS_BLOQUEANTES = new Set([
+  "confirmada",
+  "pendiente",
+  "solicitud_reprogramacion",
+]);
 
 const STORAGE_KEY = "salaqx-calendar-quirofanos";
 
@@ -188,6 +195,19 @@ export default function CalendarioPage() {
         } satisfies EventInput;
       });
   }, [turnos, selectedQuirofanos, user]);
+
+  // -------- day cell classNames: marca días con turnos bloqueantes --------
+  const dayCellClassNames = useCallback((arg: { date: Date }) => {
+    const cellDate = arg.date;
+    if (isBefore(startOfDay(cellDate), startOfDay(new Date()))) return "";
+    const tieneBloqueantes = turnos.some(
+      (t) =>
+        t.estado &&
+        ESTADOS_BLOQUEANTES.has(t.estado) &&
+        isSameDay(new Date(t.fecha_hora), cellDate),
+    );
+    return tieneBloqueantes ? ["day-with-bookings"] : [];
+  }, [turnos]);
 
   // -------- event rendering --------
   const renderEventContent = (arg: EventContentArg) => {
@@ -478,6 +498,7 @@ export default function CalendarioPage() {
             nowIndicator
             events={events}
             eventContent={renderEventContent}
+            dayCellClassNames={dayCellClassNames}
             dateClick={handleDateClick}
             selectable={user.rol === "medico"}
             selectMirror
