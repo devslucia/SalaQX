@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Calendar } from "@/components/ui/calendar";
 import {
   User, Stethoscope, Clock, AlertTriangle, Info, ArrowRight,
 } from "lucide-react";
@@ -123,6 +124,36 @@ export function SolicitarTurnoForm({
     return (configUTI.dias_permitidos as DiaSemana[]).includes(dayOfWeek);
   };
 
+  const diasHabilitados: DiaSemana[] = Array.from(
+    new Set(horarios.map((h) => h.dia)),
+  );
+  const diasUTIPermitidos: DiaSemana[] =
+    (configUTI?.dias_permitidos as DiaSemana[] | undefined) ?? [];
+
+  type DayDisabledReason = "pasado" | "no-habilitado" | "uti";
+
+  const getDayDisabledReason = (date: Date): DayDisabledReason | null => {
+    const start = startOfDay(new Date());
+    if (isBefore(startOfDay(date), start)) return "pasado";
+    const dia = getDay(date) as DiaSemana;
+    if (!diasHabilitados.includes(dia)) return "no-habilitado";
+    if (form.pasa_uti && !diasUTIPermitidos.includes(dia)) return "uti";
+    return null;
+  };
+
+  const isDayDisabled = (date: Date): boolean =>
+    getDayDisabledReason(date) !== null;
+
+  const getDayTooltip = (date: Date): string | undefined => {
+    const reason = getDayDisabledReason(date);
+    if (reason === "pasado") return "No se pueden agendar turnos en días pasados";
+    if (reason === "no-habilitado")
+      return "No hay turnos disponibles este día";
+    if (reason === "uti")
+      return "Pacientes con UTI solo pueden agendarse los días habilitados para UTI";
+    return undefined;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -153,10 +184,10 @@ export function SolicitarTurnoForm({
     setError("");
 
     try {
-      const { data, error: insertError } = await supabase
-        .from("turnos")
-        .insert({
-          medico_id: user.id,
+      const res = await fetch("/api/turnos/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           paciente_nombre: form.paciente_nombre,
           paciente_dni: form.paciente_dni,
           paciente_edad: parseInt(form.paciente_edad),
@@ -168,23 +199,28 @@ export function SolicitarTurnoForm({
           pasa_uti: form.pasa_uti,
           duracion_minutos: duracionTotal,
           fecha_hora: fechaHora.toISOString(),
-          estado: "pendiente",
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (insertError) {
-        console.error("[SolicitarTurnoForm] supabase error:", insertError);
-        setError(insertError.message);
-        toast.error("Error al solicitar el turno", { description: insertError.message });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        id?: string;
+        error?: string;
+      };
+
+      if (!res.ok || !data.ok) {
+        const msg = data.error || `Error ${res.status}`;
+        console.error("[SolicitarTurnoForm] api error:", msg);
+        setError(msg);
+        toast.error("Error al solicitar el turno", { description: msg });
         return;
       }
 
-      console.log("[SolicitarTurnoForm] turno creado:", data);
+      console.log("[SolicitarTurnoForm] turno creado:", data.id);
       toast.success("¡Turno solicitado!", {
         description: "Recibirás una notificación cuando sea revisado",
       });
-      if (data?.id) {
+      if (data.id) {
         void notify("nueva-solicitud", { turno_id: data.id });
       }
       onSuccess?.();
@@ -428,15 +464,36 @@ export function SolicitarTurnoForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="fecha">Fecha *</Label>
-              <Input
-                id="fecha"
-                type="date"
-                value={form.fecha}
-                min={format(new Date(), "yyyy-MM-dd")}
-                onChange={(e) => setForm({ ...form, fecha: e.target.value, hora: "" })}
-                required
-              />
+              <Label>Fecha *</Label>
+              <div className="rounded-lg border border-input bg-background p-1 dark:bg-[#0D1117]">
+                <Calendar
+                  mode="single"
+                  selected={form.fecha ? parseISO(form.fecha) : undefined}
+                  onSelect={(d) => {
+                    if (!d) return;
+                    setForm({
+                      ...form,
+                      fecha: format(d, "yyyy-MM-dd"),
+                      hora: "",
+                    });
+                  }}
+                  disabled={isDayDisabled}
+                  startMonth={new Date()}
+                  components={{
+                    DayButton: ({ day, ...buttonProps }) => {
+                      const tooltip = getDayTooltip(day.date);
+                      return (
+                        <button
+                          type="button"
+                          {...buttonProps}
+                          title={tooltip ?? buttonProps.title}
+                          aria-label={tooltip ?? buttonProps["aria-label"]}
+                        />
+                      );
+                    },
+                  }}
+                />
+              </div>
               {form.fecha && (
                 <p className="text-xs text-muted-foreground">
                   {format(parseISO(form.fecha), "EEEE d 'de' MMMM", { locale: es })}
