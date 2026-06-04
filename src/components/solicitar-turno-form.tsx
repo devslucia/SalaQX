@@ -129,48 +129,60 @@ export function SolicitarTurnoForm({
     const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
     if (applicableHorarios.length === 0) return [];
 
-    const result: SlotInfo[] = [];
-    const quirofanosActivos = quirofanos;
-
+    const quirofanosActivosIds = new Set(quirofanos.map((q) => q.id));
+    const quirofanosConHorarioEseDia = new Map<string, HorarioHabilitado>();
     for (const h of applicableHorarios) {
+      if (
+        quirofanosActivosIds.has(h.quirofano_id) &&
+        !quirofanosConHorarioEseDia.has(h.quirofano_id)
+      ) {
+        quirofanosConHorarioEseDia.set(h.quirofano_id, h);
+      }
+    }
+    const quirofanosTotales = quirofanosConHorarioEseDia.size;
+    if (quirofanosTotales === 0) return [];
+
+    const slotsMap = new Map<string, SlotInfo>();
+    for (const h of quirofanosConHorarioEseDia.values()) {
       const [startH, startM] = h.hora_inicio.split(":").map(Number);
       const [endH, endM] = h.hora_fin.split(":").map(Number);
       let current = startH * 60 + startM;
       const end = endH * 60 + endM;
-
       while (current + duracionMin <= end) {
         const hh = String(Math.floor(current / 60)).padStart(2, "0");
         const mm = String(current % 60).padStart(2, "0");
-        const slotInicio = new Date(date);
-        slotInicio.setHours(Math.floor(current / 60), current % 60, 0, 0);
-        const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
-
-        let libres = 0;
-        if (quirofanosActivos.length === 0) {
-          libres = 1;
-        } else {
-          for (const q of quirofanosActivos) {
-            const bloques = slotsOcupadosPorQuirofano(turnosDelDia, q.id);
-            const choca = bloques.some((b) =>
-              overlaps(slotInicio, slotFin, b.inicio, b.fin),
-            );
-            if (!choca) libres += 1;
-          }
+        const hora = `${hh}:${mm}`;
+        if (!slotsMap.has(hora)) {
+          const slotInicio = new Date(date);
+          slotInicio.setHours(Math.floor(current / 60), current % 60, 0, 0);
+          const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
+          slotsMap.set(hora, {
+            hora,
+            inicio: slotInicio,
+            fin: slotFin,
+            disponible: false,
+            quirofanosLibres: 0,
+            quirofanosTotales,
+          });
         }
-
-        result.push({
-          hora: `${hh}:${mm}`,
-          inicio: slotInicio,
-          fin: slotFin,
-          disponible: libres > 0,
-          quirofanosLibres: libres,
-          quirofanosTotales: quirofanosActivos.length,
-        });
         current += 30;
       }
     }
 
-    return result;
+    for (const slot of slotsMap.values()) {
+      const libres = Array.from(quirofanosConHorarioEseDia.keys()).filter(
+        (qId) =>
+          !slotsOcupadosPorQuirofano(turnosDelDia, qId).some((b) =>
+            overlaps(slot.inicio, slot.fin, b.inicio, b.fin),
+          ),
+      ).length;
+      slot.quirofanosLibres = libres;
+      slot.disponible = libres > 0;
+    }
+
+    return Array.from(slotsMap.values()).sort((a, b) =>
+      a.hora.localeCompare(b.hora),
+    );
   };
 
   useEffect(() => {
@@ -671,10 +683,8 @@ export function SolicitarTurnoForm({
                                 onClick={() => setForm({ ...form, hora: s.hora })}
                                 title={
                                   !s.disponible
-                                    ? "Horario ocupado"
-                                    : s.quirofanosTotales > 1
-                                      ? `${s.quirofanosLibres} de ${s.quirofanosTotales} quirófanos libres`
-                                      : undefined
+                                    ? "No hay quirófanos disponibles en este horario"
+                                    : undefined
                                 }
                                 className={cn(
                                   "inline-flex items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-sm font-medium transition-colors",

@@ -168,46 +168,82 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (quirofanosActivos && quirofanosActivos.length > 0) {
-      const { data: turnosDelDia, error: turnosDelDiaError } = await supabase
-        .from("turnos")
-        .select("id, fecha_hora, duracion_minutos, quirofano_id, estado")
-        .in("estado", ["confirmada", "pendiente", "solicitud_reprogramacion"])
-        .gte("fecha_hora", diaInicio.toISOString())
-        .lte("fecha_hora", diaFin.toISOString());
+    const quirofanosActivosIds = new Set(
+      (quirofanosActivos ?? [])
+        .map((q) => q.id)
+        .filter((id): id is string => typeof id === "string"),
+    );
 
-      if (turnosDelDiaError) {
-        console.error(
-          "[POST /api/turnos/create] turnos del día error:",
-          turnosDelDiaError,
-        );
-        return NextResponse.json(
-          { error: "No se pudieron validar los turnos del día" },
-          { status: 500 },
-        );
-      }
+    const { data: horariosDelDia, error: horariosDelDiaError } = await supabase
+      .from("horarios_habilitados")
+      .select("quirofano_id")
+      .eq("dia", diaSemana);
 
-      const hayConflicto = (quirofanoId: string): boolean => {
-        if (!turnosDelDia) return false;
-        return turnosDelDia
-          .filter((t) => t.quirofano_id === quirofanoId)
-          .some((t) => {
-            const tInicio = new Date(t.fecha_hora);
-            const tFin = new Date(tInicio.getTime() + t.duracion_minutos * 60_000);
-            return nuevoInicio < tFin && nuevoFin > tInicio;
-          });
-      };
-
-      const quirofanosLibres = quirofanosActivos.filter(
-        (q) => !hayConflicto(q.id),
+    if (horariosDelDiaError) {
+      console.error(
+        "[POST /api/turnos/create] horarios del día error:",
+        horariosDelDiaError,
       );
+      return NextResponse.json(
+        { error: "No se pudieron validar los horarios habilitados" },
+        { status: 500 },
+      );
+    }
 
-      if (quirofanosLibres.length === 0) {
-        return NextResponse.json(
-          { error: "El horario seleccionado ya fue tomado. Elegí otro." },
-          { status: 400 },
-        );
-      }
+    const quirofanosConHorarioEseDia = new Set(
+      (horariosDelDia ?? [])
+        .map((h) => h.quirofano_id)
+        .filter(
+          (id): id is string =>
+            typeof id === "string" && quirofanosActivosIds.has(id),
+        ),
+    );
+
+    if (quirofanosConHorarioEseDia.size === 0) {
+      return NextResponse.json(
+        { error: "No hay quirófanos con horario habilitado para ese día" },
+        { status: 400 },
+      );
+    }
+
+    const { data: turnosDelDia, error: turnosDelDiaError } = await supabase
+      .from("turnos")
+      .select("id, fecha_hora, duracion_minutos, quirofano_id, estado")
+      .in("estado", ["confirmada", "pendiente", "solicitud_reprogramacion"])
+      .gte("fecha_hora", diaInicio.toISOString())
+      .lte("fecha_hora", diaFin.toISOString());
+
+    if (turnosDelDiaError) {
+      console.error(
+        "[POST /api/turnos/create] turnos del día error:",
+        turnosDelDiaError,
+      );
+      return NextResponse.json(
+        { error: "No se pudieron validar los turnos del día" },
+        { status: 500 },
+      );
+    }
+
+    const hayConflicto = (quirofanoId: string): boolean => {
+      if (!turnosDelDia) return false;
+      return turnosDelDia
+        .filter((t) => t.quirofano_id === quirofanoId)
+        .some((t) => {
+          const tInicio = new Date(t.fecha_hora);
+          const tFin = new Date(tInicio.getTime() + t.duracion_minutos * 60_000);
+          return nuevoInicio < tFin && nuevoFin > tInicio;
+        });
+    };
+
+    const quirofanosLibres = Array.from(quirofanosConHorarioEseDia).filter(
+      (qId) => !hayConflicto(qId),
+    );
+
+    if (quirofanosLibres.length === 0) {
+      return NextResponse.json(
+        { error: "No hay quirófanos disponibles en ese horario, elegí otro" },
+        { status: 400 },
+      );
     }
 
     const { data: inserted, error: insertError } = await supabase
