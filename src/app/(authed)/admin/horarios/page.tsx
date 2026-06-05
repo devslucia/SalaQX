@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { SkeletonList } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, Trash2, Plus, Building2, Calendar } from "lucide-react";
 import { DIAS_SEMANA, type DiaSemana, type Quirofano, type HorarioHabilitado } from "@/lib/types";
-import { LoadingState } from "@/components/loading-state";
 import { PageHeader } from "@/components/page-header";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 export default function HorariosPage() {
@@ -22,6 +24,7 @@ export default function HorariosPage() {
   const [selectedQuirofano, setSelectedQuirofano] = useState("");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ dia: "1", hora_inicio: "08:00", hora_fin: "17:00" });
+  const [pendingDelete, setPendingDelete] = useState<HorarioHabilitado | null>(null);
   const supabase = createClient();
 
   const fetchData = async () => {
@@ -35,7 +38,7 @@ export default function HorariosPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  React.useEffect(() => { fetchData(); }, []);
 
   const filteredHorarios = horarios.filter((h) => h.quirofano_id === selectedQuirofano);
 
@@ -63,7 +66,10 @@ export default function HorariosPage() {
     }
   };
 
-  const handleDelete = async (h: HorarioHabilitado) => {
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const h = pendingDelete;
+    setPendingDelete(null);
     await supabase.from("horarios_habilitados").delete().eq("id", h.id);
     toast.success("Horario eliminado");
     fetchData();
@@ -74,7 +80,7 @@ export default function HorariosPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         icon={Clock}
         title="Horarios Habilitados"
@@ -146,37 +152,57 @@ export default function HorariosPage() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <LoadingState label="Cargando horarios..." minHeight="min-h-[200px]" />
+                <SkeletonList rows={4} />
               ) : filteredHorarios.length === 0 ? (
                 <p className="text-muted-foreground text-sm text-center py-8">
                   No hay horarios configurados para este quirófano
                 </p>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {filteredHorarios
-                    .sort((a, b) => a.dia - b.dia)
-                    .map((h) => (
-                      <div key={h.id} className="flex items-center justify-between rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Clock size={16} />
+                  <AnimatePresence mode="popLayout">
+                    {filteredHorarios
+                      .sort((a, b) => a.dia - b.dia)
+                      .map((h, i) => (
+                        <motion.div
+                          key={h.id}
+                          layout
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.2, delay: i * 0.04 }}
+                          className="flex items-center justify-between rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <Clock size={16} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold">{DIAS_SEMANA[h.dia as DiaSemana]}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{h.hora_inicio} — {h.hora_fin}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold">{DIAS_SEMANA[h.dia as DiaSemana]}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{h.hora_inicio} — {h.hora_fin}</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(h)} title="Eliminar">
-                          <Trash2 size={16} className="text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
+                          <Button variant="ghost" size="icon" onClick={() => setPendingDelete(h)} title="Eliminar">
+                            <Trash2 size={16} className="text-destructive" />
+                          </Button>
+                        </motion.div>
+                      ))}
+                  </AnimatePresence>
                 </div>
               )}
             </CardContent>
           </Card>
         </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
+        title="¿Eliminar este horario?"
+        description={`Se eliminará ${pendingDelete ? DIAS_SEMANA[pendingDelete.dia as DiaSemana] : ""} ${pendingDelete?.hora_inicio}-${pendingDelete?.hora_fin} de este quirófano.`}
+        confirmText="Eliminar"
+        variant="danger"
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

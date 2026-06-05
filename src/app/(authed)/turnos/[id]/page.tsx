@@ -488,10 +488,31 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <div className="text-center space-y-3">
-          <div className="spinner mx-auto" />
-          <p className="text-sm text-muted-foreground">Cargando turno...</p>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="h-10 w-24 bg-muted rounded-lg animate-shimmer" />
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="h-14 w-14 rounded-2xl bg-muted animate-shimmer" />
+          <div className="space-y-2 flex-1">
+            <div className="h-7 w-56 bg-muted rounded animate-shimmer" />
+            <div className="h-3 w-72 bg-muted rounded animate-shimmer" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border bg-card p-5 shadow-card space-y-3">
+              <div className="h-5 w-32 bg-muted rounded animate-shimmer" />
+              <div className="space-y-2">
+                <div className="h-3 w-24 bg-muted rounded animate-shimmer" />
+                <div className="h-4 w-full bg-muted rounded animate-shimmer" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-24 bg-muted rounded animate-shimmer" />
+                <div className="h-4 w-3/4 bg-muted rounded animate-shimmer" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -771,7 +792,8 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* Confirm Dialog */}
       <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <DialogContent onClose={() => setConfirmDialogOpen(false)} className="max-w-2xl">
+        {(onClose) => (
+        <DialogContent onClose={() => { onClose(false); setConfirmDialogOpen(false); }} className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Confirmar Turno</DialogTitle>
             <DialogDescription>
@@ -872,10 +894,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setRejectDialogOpen(false)}>
           <DialogHeader>
             <DialogTitle>Rechazar Turno</DialogTitle>
@@ -901,10 +925,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setEditDialogOpen(false)}>
           <DialogHeader>
             <DialogTitle>Editar Turno</DialogTitle>
@@ -950,10 +976,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Delete confirmation dialog (admin/encargada) */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setDeleteDialogOpen(false)}>
           <DialogHeader>
             <DialogTitle>Eliminar turno</DialogTitle>
@@ -976,10 +1004,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Solicitar eliminación (médico) */}
       <Dialog open={solicitarEliminacionOpen} onOpenChange={setSolicitarEliminacionOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setSolicitarEliminacionOpen(false)}>
           <DialogHeader>
             <DialogTitle>Solicitar eliminación de turno</DialogTitle>
@@ -1006,10 +1036,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Rechazar eliminación (admin) */}
       <Dialog open={rechazarEliminacionOpen} onOpenChange={setRechazarEliminacionOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setRechazarEliminacionOpen(false)}>
           <DialogHeader>
             <DialogTitle>Rechazar solicitud de eliminación</DialogTitle>
@@ -1036,11 +1068,13 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Solicitar reprogramación (médico) */}
       <Dialog open={solicitarReprogOpen} onOpenChange={setSolicitarReprogOpen}>
-        <DialogContent onClose={() => setSolicitarReprogOpen(false)} className="max-w-2xl">
+        {(onClose) => (
+        <DialogContent onClose={() => { onClose(false); setSolicitarReprogOpen(false); }} className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Solicitar reprogramación</DialogTitle>
           </DialogHeader>
@@ -1078,10 +1112,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Asignar otra fecha (admin) */}
       <Dialog open={asignarReprogOpen} onOpenChange={setAsignarReprogOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setAsignarReprogOpen(false)}>
           <DialogHeader>
             <DialogTitle>Asignar otra fecha al turno</DialogTitle>
@@ -1112,10 +1148,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Rechazar reprogramación (admin) */}
       <Dialog open={rechazarReprogOpen} onOpenChange={setRechazarReprogOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setRechazarReprogOpen(false)}>
           <DialogHeader>
             <DialogTitle>Rechazar reprogramación</DialogTitle>
@@ -1142,11 +1180,13 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Conflict warning modal (encargada forced confirmation with conflict) */}
       <Dialog open={conflictModalOpen} onOpenChange={setConflictModalOpen}>
-        <DialogContent onClose={() => setConflictModalOpen(false)} className="max-w-lg">
+        {(onClose) => (
+        <DialogContent onClose={() => { onClose(false); setConflictModalOpen(false); }} className="max-w-lg">
           <DialogHeader>
             <div className="mx-auto sm:mx-0 mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
               <AlertTriangle className="h-6 w-6 text-warning" aria-hidden />
@@ -1225,10 +1265,12 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
 
       {/* Reassign time modal (cambiar horario al médico) */}
       <Dialog open={reassignTimeModalOpen} onOpenChange={setReassignTimeModalOpen}>
+        {(onClose) => (
         <DialogContent onClose={() => setReassignTimeModalOpen(false)}>
           <DialogHeader>
             <DialogTitle>Cambiar horario al médico</DialogTitle>
@@ -1280,6 +1322,7 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
           </DialogFooter>
         </DialogContent>
+        )}
       </Dialog>
     </div>
   );

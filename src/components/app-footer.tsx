@@ -7,10 +7,10 @@ export function AppFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="pointer-events-none fixed bottom-0 right-0 z-10 px-3 py-1.5 text-xs text-[#8B949E] md:ml-72">
+    <footer className="pointer-events-none fixed bottom-0 right-0 z-10 hidden md:block px-3 py-1.5 text-xs text-muted-foreground md:ml-72">
       <span>
         © {year} {config.nombre} · Desarrollado por{" "}
-        <span className="font-medium">Lucía Cristaldo</span>
+        <span className="font-medium text-foreground/80">Lucía Cristaldo</span>
       </span>
     </footer>
   );

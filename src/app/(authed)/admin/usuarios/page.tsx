@@ -1,28 +1,30 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { CardTable, type CardTableColumn } from "@/components/ui/card-table";
+import { SkeletonList } from "@/components/ui/skeleton";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Pencil, Power, Search, Users as UsersIcon, Mail, Phone } from "lucide-react";
+import { Plus, Pencil, Power, Search, Users as UsersIcon, Mail, Phone, ShieldCheck, Stethoscope, Briefcase } from "lucide-react";
 import type { User, Rol } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
-import { LoadingState } from "@/components/loading-state";
 import { PageHeader } from "@/components/page-header";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 
-const ROL_BADGE: Record<Rol, { label: string; class: string }> = {
-  admin: { label: "Admin", class: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" },
-  encargada: { label: "Encargada", class: "bg-primary/10 text-primary border-primary/20" },
-  medico: { label: "Médico", class: "bg-success/10 text-success border-success/20" },
+const ROL_CONFIG: Record<Rol, { label: string; Icon: React.ComponentType<{ size?: number }>; class: string }> = {
+  admin: { label: "Admin", Icon: ShieldCheck, class: "bg-admin/15 text-admin border-admin/30" },
+  encargada: { label: "Encargada", Icon: Briefcase, class: "bg-encargada/15 text-encargada border-encargada/30" },
+  medico: { label: "Médico", Icon: Stethoscope, class: "bg-medico/15 text-medico border-medico/30" },
 };
 
 export default function UsuariosPage() {
@@ -35,16 +37,17 @@ export default function UsuariosPage() {
   const [form, setForm] = useState({ nombre: "", email: "", rol: "medico" as Rol, telefono: "", password: "" });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<User | null>(null);
   const supabase = createClient();
 
-  const fetchUsers = async () => {
+  const fetchUsers = React.useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from("users").select("*").order("created_at", { ascending: false });
     if (data) setUsers(data);
     setLoading(false);
-  };
+  }, [supabase]);
 
-  useEffect(() => { fetchUsers(); }, []);
+  React.useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -112,7 +115,10 @@ export default function UsuariosPage() {
     setSubmitting(false);
   };
 
-  const toggleActive = async (u: User) => {
+  const confirmToggle = async () => {
+    if (!pendingToggle) return;
+    const u = pendingToggle;
+    setPendingToggle(null);
     const { error } = await supabase.from("users").update({ activo: !u.activo }).eq("id", u.id);
     if (error) { toast.error("Error al cambiar estado"); return; }
     toast.success(u.activo ? "Usuario desactivado" : "Usuario activado");
@@ -129,8 +135,89 @@ export default function UsuariosPage() {
     u.email.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  const columns: CardTableColumn<User>[] = [
+    {
+      key: "usuario",
+      label: "Usuario",
+      primary: true,
+      render: (u) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
+            {u.nombre.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium">{u.nombre}</p>
+            <p className="text-xs text-muted-foreground md:hidden">{u.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "contacto",
+      label: "Contacto",
+      className: "hidden md:table-cell",
+      render: (u) => (
+        <div className="space-y-0.5">
+          <p className="text-xs flex items-center gap-1.5 text-muted-foreground">
+            <Mail size={12} />
+            {u.email}
+          </p>
+          {u.telefono && (
+            <p className="text-xs flex items-center gap-1.5 text-muted-foreground">
+              <Phone size={12} />
+              {u.telefono}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "rol",
+      label: "Rol",
+      render: (u) => {
+        const cfg = ROL_CONFIG[u.rol];
+        const Icon = cfg.Icon;
+        return (
+          <Badge className={`border ${cfg.class}`}>
+            <Icon size={11} />
+            {cfg.label}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "estado",
+      label: "Estado",
+      render: (u) => (
+        <Badge variant={u.activo ? "success" : "secondary"}>
+          {u.activo ? "Activo" : "Inactivo"}
+        </Badge>
+      ),
+    },
+    {
+      key: "acciones",
+      label: "Acciones",
+      align: "right",
+      render: (u) => (
+        <div className="inline-flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={() => openEdit(u)} title="Editar">
+            <Pencil size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setPendingToggle(u)}
+            title={u.activo ? "Desactivar" : "Activar"}
+          >
+            <Power size={16} className={u.activo ? "text-destructive" : "text-success"} />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         icon={UsersIcon}
         title="Usuarios"
@@ -153,162 +240,115 @@ export default function UsuariosPage() {
         />
       </div>
 
-      {loading ? (
-        <LoadingState label="Cargando usuarios..." />
-      ) : users.length === 0 ? (
-        <EmptyState
-          icon={UsersIcon}
-          title="Sin usuarios"
-          description="Aún no hay usuarios registrados en el sistema"
-          action={
-            <Button onClick={openCreate}>
-              <Plus size={16} />
-              Crear el primero
-            </Button>
-          }
-        />
-      ) : filteredUsers.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title="Sin resultados"
-          description={`No se encontraron usuarios con "${busqueda}"`}
-        />
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead className="hidden md:table-cell">Contacto</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
-                          {u.nombre.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-medium">{u.nombre}</p>
-                          <p className="text-xs text-muted-foreground md:hidden">{u.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="space-y-0.5">
-                        <p className="text-xs flex items-center gap-1.5 text-muted-foreground">
-                          <Mail size={12} />
-                          {u.email}
-                        </p>
-                        {u.telefono && (
-                          <p className="text-xs flex items-center gap-1.5 text-muted-foreground">
-                            <Phone size={12} />
-                            {u.telefono}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={ROL_BADGE[u.rol].class}>{ROL_BADGE[u.rol].label}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={u.activo ? "success" : "secondary"}>
-                        {u.activo ? "Activo" : "Inactivo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(u)} title="Editar">
-                          <Pencil size={16} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => toggleActive(u)}
-                          title={u.activo ? "Desactivar" : "Activar"}
-                        >
-                          <Power size={16} className={u.activo ? "text-destructive" : "text-success"} />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <CardTable
+        columns={columns}
+        data={filteredUsers}
+        keyOf={(u) => u.id}
+        loading={loading}
+        skeleton={<SkeletonList rows={5} />}
+        emptyState={
+          users.length === 0 ? (
+            <EmptyState
+              icon={UsersIcon}
+              title="Sin usuarios"
+              description="Aún no hay usuarios registrados en el sistema"
+              action={
+                <Button onClick={openCreate}>
+                  <Plus size={16} />
+                  Crear el primero
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={Search}
+              title="Sin resultados"
+              description={`No se encontraron usuarios con "${busqueda}"`}
+            />
+          )
+        }
+      />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent onClose={() => setDialogOpen(false)}>
-          <DialogHeader>
-            <DialogTitle>{editingUser ? "Editar Usuario" : "Crear Usuario"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-            <div className="space-y-2">
-              <Label>Nombre</Label>
-              <Input
-                value={form.nombre}
-                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Nombre completo"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="email@hospital.com"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+        {(onClose) => (
+          <DialogContent onClose={() => { onClose(false); setDialogOpen(false); }}>
+            <DialogHeader>
+              <DialogTitle>{editingUser ? "Editar Usuario" : "Crear Usuario"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <div className="space-y-2">
-                <Label>Rol</Label>
-                <Select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>
-                  <option value="admin">Admin</option>
-                  <option value="encargada">Encargada</option>
-                  <option value="medico">Médico</option>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Teléfono</Label>
+                <Label>Nombre</Label>
                 <Input
-                  value={form.telefono}
-                  onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                  placeholder="Opcional"
+                  value={form.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                  placeholder="Nombre completo"
                 />
               </div>
-            </div>
-            {!editingUser && (
               <div className="space-y-2">
-                <Label>Contraseña</Label>
+                <Label>Email</Label>
                 <Input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="Mínimo 6 caracteres"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@hospital.com"
                 />
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} disabled={submitting}>
-              {submitting ? "Guardando..." : editingUser ? "Guardar" : "Crear Usuario"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Rol</Label>
+                  <Select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>
+                    <option value="admin">Admin</option>
+                    <option value="encargada">Encargada</option>
+                    <option value="medico">Médico</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Teléfono</Label>
+                  <Input
+                    value={form.telefono}
+                    onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
+              {!editingUser && (
+                <div className="space-y-2">
+                  <Label>Contraseña</Label>
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSave} disabled={submitting}>
+                {submitting ? "Guardando..." : editingUser ? "Guardar" : "Crear Usuario"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
+
+      <ConfirmDialog
+        open={pendingToggle !== null}
+        onOpenChange={(o) => { if (!o) setPendingToggle(null); }}
+        title={pendingToggle?.activo ? "¿Desactivar este usuario?" : "¿Activar este usuario?"}
+        description={
+          pendingToggle?.activo
+            ? `${pendingToggle.nombre} no podrá iniciar sesión pero sus datos y turnos permanecerán en el sistema.`
+            : `${pendingToggle?.nombre} podrá volver a iniciar sesión en el sistema.`
+        }
+        confirmText={pendingToggle?.activo ? "Desactivar" : "Activar"}
+        variant={pendingToggle?.activo ? "warning" : "info"}
+        onConfirm={confirmToggle}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Settings, Check, Info, Save } from "lucide-react";
 import { DIAS_SEMANA, type DiaSemana, type ConfigUTI } from "@/lib/types";
-import { LoadingState } from "@/components/loading-state";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 export default function ConfigUTIPage() {
@@ -76,7 +77,7 @@ export default function ConfigUTIPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         icon={Settings}
         title="Configuración UTI"
@@ -95,7 +96,7 @@ export default function ConfigUTIPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           {loading ? (
-            <LoadingState label="Cargando configuración..." minHeight="min-h-[200px]" />
+            <SkeletonForm fields={3} />
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -103,10 +104,12 @@ export default function ConfigUTIPage() {
                   const day = parseInt(key) as DiaSemana;
                   const isSelected = selectedDays.includes(day);
                   return (
-                    <button
+                    <motion.button
                       key={key}
                       onClick={() => toggleDay(day)}
                       type="button"
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 25 }}
                       className={`flex items-center justify-center gap-2 rounded-lg border p-3.5 text-sm font-semibold transition-all ${
                         isSelected
                           ? "bg-primary text-primary-foreground border-primary shadow-sm"
@@ -115,7 +118,7 @@ export default function ConfigUTIPage() {
                     >
                       {isSelected && <Check size={16} />}
                       {label}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>

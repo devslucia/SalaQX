@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Mail, Lock, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useSanatorioConfig, getIniciales } from "@/lib/sanatorio-config-context";
+import { motion } from "framer-motion";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -47,6 +49,7 @@ export default function LoginPage() {
   };
 
   const isDark = mounted && resolvedTheme === "dark";
+  const logoIsExternal = sanatorio.logo_url?.startsWith("http") || sanatorio.logo_url?.startsWith("https");
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
@@ -59,9 +62,26 @@ export default function LoginPage() {
         {isDark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      <div className="w-full max-w-md">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-md"
+      >
         <div className="text-center mb-6">
-          {sanatorio.logo_url ? (
+          {sanatorio.logo_url && logoIsExternal ? (
+            <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg mb-4 ring-1 ring-border">
+              <Image
+                src={sanatorio.logo_url}
+                alt={sanatorio.nombre}
+                width={64}
+                height={64}
+                className="h-full w-full object-contain"
+                unoptimized
+                priority
+              />
+            </div>
+          ) : sanatorio.logo_url ? (
             <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg mb-4 ring-1 ring-border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -71,7 +91,7 @@ export default function LoginPage() {
               />
             </div>
           ) : (
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg mb-4 bg-[#1B4F72] text-white">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg mb-4 bg-primary text-primary-foreground">
               <span className="text-lg font-bold tracking-wide">
                 {getIniciales(sanatorio.nombre)}
               </span>
@@ -134,7 +154,7 @@ export default function LoginPage() {
         <p className="text-center text-xs text-muted-foreground mt-6">
           Sistema cerrado · Solo usuarios autorizados
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }

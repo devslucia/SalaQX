@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { SkeletonGrid } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ESTADO_BORDER_COLORS,
@@ -19,9 +20,9 @@ import { formatDateTime, cn } from "@/lib/utils";
 import { Calendar, Filter, Search, User, Building2, CalendarPlus, SearchX, Inbox } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
-import { LoadingState } from "@/components/loading-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusIcons } from "@/components/empty-state";
+import { motion } from "framer-motion";
 
 const estadoVariant: Record<EstadoTurno, "default" | "success" | "destructive" | "warning" | "secondary"> = {
   pendiente: "warning",
@@ -112,7 +113,7 @@ export default function TurnosPage() {
   const solicitudesCount = turnos.filter((t) => SOLICITUD_STATES.includes(t.estado)).length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         icon={Calendar}
         title="Turnos"
@@ -177,7 +178,7 @@ export default function TurnosPage() {
       )}
 
       {loading ? (
-        <LoadingState label="Cargando turnos..." />
+        <SkeletonGrid items={6} />
       ) : turnos.length === 0 ? (
         <EmptyState
           icon={Calendar}
@@ -204,66 +205,73 @@ export default function TurnosPage() {
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredTurnos.map((t) => {
+          {filteredTurnos.map((t, i) => {
             const Icon = StatusIcons[t.estado] || Calendar;
             return (
-              <Link key={t.id} href={`/turnos/${t.id}`} className="block group">
-                <Card
-                  className={cn(
-                    "h-full transition-all hover:shadow-md hover:-translate-y-0.5 border-l-4",
-                    ESTADO_BORDER_COLORS[t.estado]
-                  )}
-                >
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
-                          {t.paciente_nombre}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          DNI {t.paciente_dni} · {t.paciente_edad} años
-                        </p>
+              <motion.div
+                key={t.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: i * 0.03, ease: "easeOut" }}
+              >
+                <Link href={`/turnos/${t.id}`} className="block group">
+                  <Card
+                    className={cn(
+                      "h-full transition-all hover:shadow-md hover:-translate-y-0.5 border-l-4",
+                      ESTADO_BORDER_COLORS[t.estado]
+                    )}
+                  >
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+                            {t.paciente_nombre}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            DNI {t.paciente_dni} · {t.paciente_edad} años
+                          </p>
+                        </div>
+                        <Icon
+                          size={18}
+                          className={cn(
+                            "shrink-0",
+                            t.estado === "confirmada" && "text-success",
+                            t.estado === "pendiente" && "text-warning",
+                            t.estado === "rechazada" && "text-destructive",
+                            (t.estado === "suspendida" || t.estado === "eliminada") && "text-muted-foreground"
+                          )}
+                        />
                       </div>
-                      <Icon
-                        size={18}
-                        className={cn(
-                          "shrink-0",
-                          t.estado === "confirmada" && "text-success",
-                          t.estado === "pendiente" && "text-warning",
-                          t.estado === "rechazada" && "text-destructive",
-                          (t.estado === "suspendida" || t.estado === "eliminada") && "text-muted-foreground"
-                        )}
-                      />
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <p className="text-sm font-medium truncate">{t.tipo_cirugia}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <User size={12} />
-                        {t.medico_nombre}
-                      </p>
-                      {t.quirofano && (
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-medium truncate">{t.tipo_cirugia}</p>
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          <Building2 size={12} />
-                          {t.quirofano.nombre}
+                          <User size={12} />
+                          {t.medico_nombre}
                         </p>
-                      )}
-                    </div>
+                        {t.quirofano && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Building2 size={12} />
+                            {t.quirofano.nombre}
+                          </p>
+                        )}
+                      </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t">
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(t.fecha_hora)}
-                      </span>
-                      <Badge
-                        variant={estadoVariant[t.estado]}
-                        className={cn("border", estadoBadgeClass[t.estado])}
-                      >
-                        {ESTADO_LABELS[t.estado] ?? t.estado}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(t.fecha_hora)}
+                        </span>
+                        <Badge
+                          variant={estadoVariant[t.estado]}
+                          className={cn("border", estadoBadgeClass[t.estado])}
+                        >
+                          {ESTADO_LABELS[t.estado] ?? t.estado}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
             );
           })}
         </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -14,10 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Building2, Save, Upload, Trash2 } from "lucide-react";
+import { Building2, Save, Upload, Trash2, Image as ImageIcon } from "lucide-react";
 import { LoadingState } from "@/components/loading-state";
 import { PageHeader } from "@/components/page-header";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   useSanatorioConfig,
   getIniciales,
@@ -39,6 +42,7 @@ export default function SanatorioConfigPage() {
   const [savingNombre, setSavingNombre] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -59,6 +63,10 @@ export default function SanatorioConfigPage() {
     setPreviewUrl(null);
     return undefined;
   }, [selectedFile]);
+
+  useEffect(() => {
+    setNombre(config.nombre);
+  }, [config.nombre]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,11 +149,9 @@ export default function SanatorioConfigPage() {
     setUploadingLogo(false);
   };
 
-  const handleRemoveLogo = async () => {
+  const confirmRemoveLogo = async () => {
+    setPendingRemove(false);
     if (!user || !config.id) return;
-    if (!confirm("¿Eliminar el logo? Quedarán las iniciales del nombre.")) {
-      return;
-    }
     setUploadingLogo(true);
     try {
       const { error } = await supabase
@@ -223,9 +229,10 @@ export default function SanatorioConfigPage() {
   }
 
   const currentLogo = previewUrl ?? config.logo_url;
+  const isExternalUrl = currentLogo?.startsWith("http") || currentLogo?.startsWith("https");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         icon={Building2}
         title="Configuración del Sanatorio"
@@ -270,7 +277,16 @@ export default function SanatorioConfigPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
-              {currentLogo ? (
+              {currentLogo && isExternalUrl ? (
+                <Image
+                  src={currentLogo}
+                  alt="Logo del sanatorio"
+                  width={80}
+                  height={80}
+                  className="h-full w-full object-contain"
+                  unoptimized
+                />
+              ) : currentLogo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={currentLogo}
@@ -278,7 +294,7 @@ export default function SanatorioConfigPage() {
                   className="h-full w-full object-contain"
                 />
               ) : (
-                <span className="text-lg font-bold text-[#1B4F72]">
+                <span className="text-lg font-bold text-primary">
                   {getIniciales(nombre || config.nombre)}
                 </span>
               )}
@@ -302,7 +318,7 @@ export default function SanatorioConfigPage() {
                 {config.logo_url && !previewUrl && (
                   <Button
                     variant="outline"
-                    onClick={handleRemoveLogo}
+                    onClick={() => setPendingRemove(true)}
                     disabled={uploadingLogo}
                   >
                     <Trash2 size={16} className="mr-2" />
@@ -310,10 +326,24 @@ export default function SanatorioConfigPage() {
                   </Button>
                 )}
               </div>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                <ImageIcon size={12} />
+                Tip: usá un PNG con fondo transparente para mejor resultado
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendingRemove}
+        onOpenChange={setPendingRemove}
+        title="¿Eliminar el logo?"
+        description="El sanatorio quedará identificado por las iniciales de su nombre. Esta acción se puede revertir subiendo un nuevo logo."
+        confirmText="Eliminar logo"
+        variant="danger"
+        onConfirm={confirmRemoveLogo}
+      />
     </div>
   );
 }
