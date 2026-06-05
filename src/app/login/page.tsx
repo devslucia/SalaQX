@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Stethoscope, Mail, Lock, Sun, Moon } from "lucide-react";
+import { Mail, Lock, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
+import { useSanatorioConfig, getIniciales } from "@/lib/sanatorio-config-context";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
   const { resolvedTheme, setTheme } = useTheme();
+  const { config: sanatorio } = useSanatorioConfig();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -59,10 +61,23 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg mb-4">
-            <Stethoscope size={28} strokeWidth={2.2} />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">SalaQX</h1>
+          {sanatorio.logo_url ? (
+            <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg mb-4 ring-1 ring-border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={sanatorio.logo_url}
+                alt={sanatorio.nombre}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg mb-4 bg-[#1B4F72] text-white">
+              <span className="text-lg font-bold tracking-wide">
+                {getIniciales(sanatorio.nombre)}
+              </span>
+            </div>
+          )}
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{sanatorio.nombre}</h1>
           <p className="text-sm text-muted-foreground mt-1.5">Sistema de Gestión de Turnos Quirúrgicos</p>
         </div>
 

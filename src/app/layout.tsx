@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SanatorioConfigProvider } from "@/lib/sanatorio-config-context";
+import { AppFooter } from "@/components/app-footer";
 import { Toaster } from "sonner";
 
 const inter = Inter({
@@ -30,17 +32,20 @@ export default function RootLayout({
           disableTransitionOnChange={false}
           storageKey="salaqx-theme"
         >
-          {children}
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            toastOptions={{
-              classNames: {
-                toast: "rounded-lg border",
-              },
-            }}
-          />
+          <SanatorioConfigProvider>
+            {children}
+            <AppFooter />
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              toastOptions={{
+                classNames: {
+                  toast: "rounded-lg border",
+                },
+              }}
+            />
+          </SanatorioConfigProvider>
         </ThemeProvider>
       </body>
     </html>

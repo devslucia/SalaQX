@@ -18,6 +18,7 @@ interface SolicitudEliminacionEmailProps {
   quirofano: { id: string; nombre: string } | null;
   motivo: string | null;
   turnoUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function SolicitudEliminacionEmail(props: SolicitudEliminacionEmailProps) {
@@ -25,6 +26,8 @@ export function SolicitudEliminacionEmail(props: SolicitudEliminacionEmailProps)
     <EmailLayout
       preview={`${props.medico.nombre} solicita eliminar un turno confirmado`}
       title="Solicitud de eliminación de turno"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

@@ -17,6 +17,7 @@ interface NuevaSolicitudEmailProps {
   fechaHora: string;
   duracion: string;
   turnoUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function NuevaSolicitudEmail(props: NuevaSolicitudEmailProps) {
@@ -26,6 +27,8 @@ export function NuevaSolicitudEmail(props: NuevaSolicitudEmailProps) {
     <EmailLayout
       preview={`Nueva solicitud de ${props.medico.nombre} para ${props.paciente.paciente_nombre}`}
       title="Nueva solicitud de turno"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

@@ -16,6 +16,7 @@ interface ReprogramacionConfirmadaEmailProps {
   fechaNueva: string;
   quirofano: { id: string; nombre: string } | null;
   propuestaPorMedico: boolean;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function ReprogramacionConfirmadaEmail(props: ReprogramacionConfirmadaEmailProps) {
@@ -23,6 +24,8 @@ export function ReprogramacionConfirmadaEmail(props: ReprogramacionConfirmadaEma
     <EmailLayout
       preview={`Tu cirugía fue reprogramada para ${formatFechaArg(props.fechaNueva)}`}
       title="Reprogramación confirmada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

@@ -18,6 +18,7 @@ interface TurnoEditadoEmailProps {
   duracion: string;
   cambios: string[];
   turnoUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function TurnoEditadoEmail(props: TurnoEditadoEmailProps) {
@@ -27,6 +28,8 @@ export function TurnoEditadoEmail(props: TurnoEditadoEmailProps) {
     <EmailLayout
       preview={`Tu cirugía para ${fechaFmt} fue modificada`}
       title="Tu cirugía fue modificada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

@@ -24,10 +24,19 @@ export const BRAND_MUTED = "#6B7280";
 export interface EmailLayoutProps {
   preview: string;
   title: string;
+  sanatorioNombre: string;
+  sanatorioLogoUrl: string | null;
   children: React.ReactNode;
 }
 
-export function EmailLayout({ preview, title, children }: EmailLayoutProps) {
+export function EmailLayout({
+  preview,
+  title,
+  sanatorioNombre,
+  sanatorioLogoUrl,
+  children,
+}: EmailLayoutProps) {
+  const year = new Date().getFullYear();
   return (
     <Html lang="es">
       <Head>
@@ -60,6 +69,21 @@ export function EmailLayout({ preview, title, children }: EmailLayoutProps) {
               textAlign: "center",
             }}
           >
+            {sanatorioLogoUrl ? (
+              <Img
+                src={sanatorioLogoUrl}
+                alt={sanatorioNombre}
+                width="64"
+                height="64"
+                style={{
+                  display: "block",
+                  margin: "0 auto 8px auto",
+                  borderRadius: "8px",
+                  backgroundColor: "#FFFFFF",
+                  padding: "4px",
+                }}
+              />
+            ) : null}
             <Text
               style={{
                 margin: 0,
@@ -69,7 +93,7 @@ export function EmailLayout({ preview, title, children }: EmailLayoutProps) {
                 letterSpacing: "-0.02em",
               }}
             >
-              SalaQX
+              {sanatorioNombre}
             </Text>
             <Text
               style={{
@@ -122,9 +146,22 @@ export function EmailLayout({ preview, title, children }: EmailLayoutProps) {
                 lineHeight: "1.5",
               }}
             >
-              SalaQX · Gestión de quirófanos
+              {sanatorioNombre} · Gestión de quirófanos
               <br />
               Este es un email automático, no responder.
+            </Text>
+            <Text
+              style={{
+                margin: "10px 0 0 0",
+                fontSize: "11px",
+                color: BRAND_ACCENT,
+                lineHeight: "1.5",
+                opacity: 0.85,
+              }}
+            >
+              © {year} {sanatorioNombre}
+              <br />
+              Desarrollado por Lucía Cristaldo. Todos los derechos reservados.
             </Text>
           </Section>
 
@@ -136,7 +173,7 @@ export function EmailLayout({ preview, title, children }: EmailLayoutProps) {
               margin: "16px 0 0 0",
             }}
           >
-            © {new Date().getFullYear()} SalaQX. Todos los derechos reservados.
+            © {year} {sanatorioNombre}. Todos los derechos reservados.
           </Text>
         </Container>
       </Body>

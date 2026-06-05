@@ -17,6 +17,7 @@ interface TurnoConfirmadoEmailProps {
   quirofano: { id: string; nombre: string } | null;
   duracion: string;
   turnoUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function TurnoConfirmadoEmail(props: TurnoConfirmadoEmailProps) {
@@ -26,6 +27,8 @@ export function TurnoConfirmadoEmail(props: TurnoConfirmadoEmailProps) {
     <EmailLayout
       preview={`Turno confirmado para ${props.paciente.paciente_nombre} el ${fechaFmt}`}
       title="Tu turno fue confirmado"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

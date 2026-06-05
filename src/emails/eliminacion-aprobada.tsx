@@ -13,6 +13,7 @@ interface EliminacionAprobadaEmailProps {
   paciente: { paciente_nombre: string; paciente_dni: string };
   tipoCirugia: string;
   fechaHora: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function EliminacionAprobadaEmail(props: EliminacionAprobadaEmailProps) {
@@ -20,6 +21,8 @@ export function EliminacionAprobadaEmail(props: EliminacionAprobadaEmailProps) {
     <EmailLayout
       preview={`Tu solicitud de eliminación fue aprobada`}
       title="Eliminación aprobada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

@@ -104,6 +104,14 @@ export interface Notificacion {
   enviado_at: string | null;
 }
 
+export interface ConfigSanatorio {
+  id: string;
+  nombre: string;
+  logo_url: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
 export const DIAS_SEMANA: Record<DiaSemana, string> = {
   0: "Domingo",
   1: "Lunes",

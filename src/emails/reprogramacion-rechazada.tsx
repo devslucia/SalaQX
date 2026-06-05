@@ -15,6 +15,7 @@ interface ReprogramacionRechazadaEmailProps {
   fechaOriginal: string;
   fechaPropuesta: string;
   motivoRechazo: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function ReprogramacionRechazadaEmail(props: ReprogramacionRechazadaEmailProps) {
@@ -22,6 +23,8 @@ export function ReprogramacionRechazadaEmail(props: ReprogramacionRechazadaEmail
     <EmailLayout
       preview={`Tu solicitud de reprogramación fue rechazada`}
       title="Reprogramación rechazada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

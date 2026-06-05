@@ -13,6 +13,7 @@ interface TurnoSuspendidoEmailProps {
   paciente: { paciente_nombre: string; paciente_dni: string };
   tipoCirugia: string;
   fechaHora: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function TurnoSuspendidoEmail(props: TurnoSuspendidoEmailProps) {
@@ -22,6 +23,8 @@ export function TurnoSuspendidoEmail(props: TurnoSuspendidoEmailProps) {
     <EmailLayout
       preview={`Cirugía suspendida para ${fechaFmt}`}
       title="Cirugía suspendida"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

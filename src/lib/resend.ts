@@ -54,6 +54,28 @@ function getAdminClient() {
   });
 }
 
+export interface SanatorioConfigForEmail {
+  nombre: string;
+  logo_url: string | null;
+}
+
+export async function loadSanatorioConfig(): Promise<SanatorioConfigForEmail> {
+  try {
+    const supabase = getAdminClient();
+    const { data } = await supabase
+      .from("config_sanatorio")
+      .select("nombre, logo_url")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return { nombre: "SalaQX", logo_url: null };
+    return { nombre: data.nombre ?? "SalaQX", logo_url: data.logo_url ?? null };
+  } catch (err) {
+    console.error("[resend] failed to load sanatorio config:", err);
+    return { nombre: "SalaQX", logo_url: null };
+  }
+}
+
 export interface TurnoContext {
   turno: {
     id: string;
@@ -206,7 +228,10 @@ async function sendOne(params: {
 }
 
 export async function sendNuevaSolicitud(turnoId: string): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico) return { ok: false, error: "medico not found" };
   const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
@@ -223,13 +248,17 @@ export async function sendNuevaSolicitud(turnoId: string): Promise<SendResult> {
         fechaHora: ctx.turno.fecha_hora,
         duracion: formatDuracion(ctx.turno.duracion_minutos),
         turnoUrl,
+        sanatorio,
       }),
     "nueva_solicitud",
   );
 }
 
 export async function sendTurnoConfirmado(turnoId: string): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -246,6 +275,7 @@ export async function sendTurnoConfirmado(turnoId: string): Promise<SendResult> 
       quirofano: ctx.quirofano,
       duracion: formatDuracion(ctx.turno.duracion_minutos),
       turnoUrl,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "confirmacion" },
   });
@@ -255,7 +285,10 @@ export async function sendTurnoConfirmadoConCambio(
   turnoId: string,
   fechaHoraAnterior: string,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
   if (!ctx.quirofano) return { ok: false, error: "quirofano not assigned" };
@@ -271,6 +304,7 @@ export async function sendTurnoConfirmadoConCambio(
       fechaHoraNueva: ctx.turno.fecha_hora,
       quirofanoNombre: ctx.quirofano.nombre,
       motivo: "el quirófano no tenía disponibilidad en tu horario solicitado",
+      sanatorio,
     }),
     log: {
       turnoId,
@@ -284,7 +318,10 @@ export async function sendTurnoRechazado(
   turnoId: string,
   motivo: string,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -300,13 +337,17 @@ export async function sendTurnoRechazado(
       fechaHora: ctx.turno.fecha_hora,
       motivo,
       solicitarUrl: turnoUrl,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "rechazo" },
   });
 }
 
 export async function sendRecordatorio24hs(turnoId: string): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -320,6 +361,7 @@ export async function sendRecordatorio24hs(turnoId: string): Promise<SendResult>
       fechaHora: ctx.turno.fecha_hora,
       quirofano: ctx.quirofano,
       medicoTelefono: ctx.medico.telefono ?? ctx.turno.medico_telefono,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "recordatorio" },
   });
@@ -335,7 +377,10 @@ export async function sendCirugiaEditada(
   turnoId: string,
   cambiosIn: string[] | CambioEdit[],
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -371,13 +416,17 @@ export async function sendCirugiaEditada(
       duracion: formatDuracion(ctx.turno.duracion_minutos),
       cambios,
       turnoUrl,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "edicion" },
   });
 }
 
 export async function sendCirugiaSuspendida(turnoId: string): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -389,6 +438,7 @@ export async function sendCirugiaSuspendida(turnoId: string): Promise<SendResult
       paciente: ctx.turno,
       tipoCirugia: ctx.turno.tipo_cirugia,
       fechaHora: ctx.turno.fecha_hora,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "suspension" },
   });
@@ -442,7 +492,10 @@ export async function sendSolicitudEliminacion(
   turnoId: string,
   motivo: string | null,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico) return { ok: false, error: "medico not found" };
   const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
@@ -460,13 +513,17 @@ export async function sendSolicitudEliminacion(
         quirofano: ctx.quirofano,
         motivo,
         turnoUrl,
+        sanatorio,
       }),
     "solicitud_eliminacion",
   );
 }
 
 export async function sendEliminacionAprobada(turnoId: string): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -478,6 +535,7 @@ export async function sendEliminacionAprobada(turnoId: string): Promise<SendResu
       paciente: ctx.turno,
       tipoCirugia: ctx.turno.tipo_cirugia,
       fechaHora: ctx.turno.fecha_hora,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "eliminacion_aprobada" },
   });
@@ -487,7 +545,10 @@ export async function sendEliminacionRechazada(
   turnoId: string,
   motivoRechazo: string,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -500,6 +561,7 @@ export async function sendEliminacionRechazada(
       tipoCirugia: ctx.turno.tipo_cirugia,
       fechaHora: ctx.turno.fecha_hora,
       motivoRechazo,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "eliminacion_rechazada" },
   });
@@ -510,7 +572,10 @@ export async function sendSolicitudReprogramacion(
   fechaPropuesta: string,
   motivo: string | null,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico) return { ok: false, error: "medico not found" };
   const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
@@ -528,6 +593,7 @@ export async function sendSolicitudReprogramacion(
         fechaPropuesta,
         motivo,
         turnoUrl,
+        sanatorio,
       }),
     "solicitud_reprogramacion",
   );
@@ -538,7 +604,10 @@ export async function sendReprogramacionConfirmada(
   fechaAnterior: string,
   propuestaPorMedico: boolean,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -553,6 +622,7 @@ export async function sendReprogramacionConfirmada(
       fechaNueva: ctx.turno.fecha_hora,
       quirofano: ctx.quirofano,
       propuestaPorMedico,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "reprogramacion_confirmada" },
   });
@@ -563,7 +633,10 @@ export async function sendReprogramacionRechazada(
   fechaPropuesta: string,
   motivoRechazo: string,
 ): Promise<SendResult> {
-  const ctx = await loadTurnoContext(turnoId);
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
   if (!ctx) return { ok: false, error: "turno not found" };
   if (!ctx.medico?.email) return { ok: false, error: "medico has no email" };
 
@@ -577,6 +650,7 @@ export async function sendReprogramacionRechazada(
       fechaOriginal: ctx.turno.fecha_hora,
       fechaPropuesta,
       motivoRechazo,
+      sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "reprogramacion_rechazada" },
   });

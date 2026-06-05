@@ -16,6 +16,7 @@ interface TurnoRechazadoEmailProps {
   fechaHora: string;
   motivo: string;
   solicitarUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function TurnoRechazadoEmail(props: TurnoRechazadoEmailProps) {
@@ -25,6 +26,8 @@ export function TurnoRechazadoEmail(props: TurnoRechazadoEmailProps) {
     <EmailLayout
       preview={`Tu solicitud de turno para ${fechaFmt} fue rechazada`}
       title="Tu solicitud de turno fue rechazada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

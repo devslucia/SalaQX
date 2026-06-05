@@ -18,6 +18,7 @@ interface SolicitudReprogramacionEmailProps {
   fechaPropuesta: string;
   motivo: string | null;
   turnoUrl: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function SolicitudReprogramacionEmail(props: SolicitudReprogramacionEmailProps) {
@@ -25,6 +26,8 @@ export function SolicitudReprogramacionEmail(props: SolicitudReprogramacionEmail
     <EmailLayout
       preview={`${props.medico.nombre} solicita reprogramar un turno`}
       title="Solicitud de reprogramación"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

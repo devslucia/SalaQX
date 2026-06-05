@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useSanatorioConfig, getIniciales } from "@/lib/sanatorio-config-context";
 import { toast } from "sonner";
 import {
   LayoutDashboard,
@@ -23,7 +24,6 @@ import {
   LogOut,
   Menu,
   X,
-  Stethoscope,
 } from "lucide-react";
 
 interface NavItem {
@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
   { label: "Obras Sociales", href: "/admin/obras-sociales", icon: <Heart size={18} />, roles: ["admin", "encargada"] },
   { label: "Horarios", href: "/admin/horarios", icon: <Clock size={18} />, roles: ["admin", "encargada"] },
   { label: "Config UTI", href: "/admin/config-uti", icon: <Settings size={18} />, roles: ["admin", "encargada"] },
+  { label: "Configuración", href: "/admin/sanatorio", icon: <Settings size={18} />, roles: ["admin"] },
 ];
 
 function getInitials(name: string): string {
@@ -76,6 +77,7 @@ const ROL_CONFIG: Record<string, { label: string; avatarBg: string; pillClass: s
 
 export function Sidebar() {
   const { user, loading } = useAuth();
+  const { config: sanatorio } = useSanatorioConfig();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -105,18 +107,34 @@ export function Sidebar() {
         className="flex items-center gap-3 px-5 py-6 border-b"
         style={{ borderColor: "var(--sidebar-border)" }}
       >
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-lg ring-1 ring-white/20"
-          style={{
-            background: "linear-gradient(135deg, #FFFFFF 0%, #E8F4FD 100%)",
-            color: "#1B4F72",
-          }}
-        >
-          <Stethoscope size={22} strokeWidth={2.2} />
-        </div>
+        {sanatorio.logo_url ? (
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-lg ring-1 ring-white/20"
+            style={{ background: "#FFFFFF" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={sanatorio.logo_url}
+              alt={sanatorio.nombre}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        ) : (
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-lg ring-1 ring-white/20"
+            style={{
+              background: "linear-gradient(135deg, #1B4F72 0%, #2874A6 100%)",
+              color: "#FFFFFF",
+            }}
+          >
+            <span className="text-sm font-bold tracking-wide">
+              {getIniciales(sanatorio.nombre)}
+            </span>
+          </div>
+        )}
         <div className="min-w-0">
           <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
-            SalaQX
+            {sanatorio.nombre}
           </h1>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/65 mt-0.5">
             Gestión Quirúrgica

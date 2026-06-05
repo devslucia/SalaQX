@@ -15,6 +15,7 @@ interface TurnoRecordatorioEmailProps {
   fechaHora: string;
   quirofano: { id: string; nombre: string } | null;
   medicoTelefono: string | null;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function TurnoRecordatorioEmail(props: TurnoRecordatorioEmailProps) {
@@ -25,6 +26,8 @@ export function TurnoRecordatorioEmail(props: TurnoRecordatorioEmailProps) {
     <EmailLayout
       preview={`Recordatorio: cirugía mañana a las ${horaCorta} hs`}
       title="Recordatorio: cirugía mañana"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>

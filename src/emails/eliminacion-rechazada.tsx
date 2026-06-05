@@ -14,6 +14,7 @@ interface EliminacionRechazadaEmailProps {
   tipoCirugia: string;
   fechaHora: string;
   motivoRechazo: string;
+  sanatorio: { nombre: string; logo_url: string | null };
 }
 
 export function EliminacionRechazadaEmail(props: EliminacionRechazadaEmailProps) {
@@ -21,6 +22,8 @@ export function EliminacionRechazadaEmail(props: EliminacionRechazadaEmailProps)
     <EmailLayout
       preview={`Tu solicitud de eliminación fue rechazada`}
       title="Eliminación rechazada"
+      sanatorioNombre={props.sanatorio.nombre}
+      sanatorioLogoUrl={props.sanatorio.logo_url}
     >
       <Greeting name={props.destinatarioNombre} />
       <Paragraph>
