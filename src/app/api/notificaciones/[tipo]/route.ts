@@ -16,6 +16,7 @@ import {
   type NotificationTipo,
   isResendConfigured,
 } from "@/lib/resend";
+import { actionRatelimit, applyRateLimit, getClientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +102,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!turno_id) {
     return NextResponse.json({ error: "turno_id es requerido" }, { status: 400 });
   }
+
+  // Rate-limit por IP. /api/notificaciones/[tipo] puede ser llamado
+  // tanto por usuarios autenticados (vía notify()) como por el cron
+  // (vía /api/cron/reminders), pero esta ruta NO es la del cron.
+  const ip = getClientIp(request);
+  const limited = await applyRateLimit(actionRatelimit, `action:ip:${ip}`);
+  if (!limited.ok) return limited.response;
 
   if (!isResendConfigured()) {
     console.warn(`[notificaciones] RESEND_API_KEY no configurada, omitiendo ${tipoNorm}`);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { sendEliminacionAprobada } from "@/lib/resend";
+import { actionRatelimit, applyRateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,9 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  const limited = await applyRateLimit(actionRatelimit, `action:user:${user.id}`);
+  if (!limited.ok) return limited.response;
 
   const { data: profile } = await supabase
     .from("users")

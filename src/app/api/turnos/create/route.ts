@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { actionRatelimit, applyRateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
+
+    const limited = await applyRateLimit(actionRatelimit, `action:user:${user.id}`);
+    if (!limited.ok) return limited.response;
 
     const body = (await request.json()) as Partial<CreateTurnoPayload>;
 

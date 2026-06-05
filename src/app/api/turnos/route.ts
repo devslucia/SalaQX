@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/notifications";
+import { actionRatelimit, applyRateLimit } from "@/lib/ratelimit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,6 +9,16 @@ export async function POST(request: NextRequest) {
     const { action, turno_id } = body;
 
     const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    const limited = await applyRateLimit(actionRatelimit, `action:user:${user.id}`);
+    if (!limited.ok) return limited.response;
 
     const { data: turno, error: turnoError } = await supabase
       .from("turnos")

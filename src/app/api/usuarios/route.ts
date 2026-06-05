@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { actionRatelimit, applyRateLimit } from "@/lib/ratelimit";
 
 // Service role client (bypasses RLS)
 function getServiceClient() {
@@ -20,6 +21,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await applyRateLimit(actionRatelimit, `action:user:${user.id}`);
+    if (!limited.ok) return limited.response;
 
     const { data: profile } = await supabase
       .from("users")
@@ -82,6 +86,9 @@ export async function PATCH(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await applyRateLimit(actionRatelimit, `action:user:${user.id}`);
+    if (!limited.ok) return limited.response;
 
     const { data: profile } = await supabase
       .from("users")
