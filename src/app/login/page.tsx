@@ -8,100 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Mail, Lock, Sun, Moon, Hourglass } from "lucide-react";
+import { Mail, Lock, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSanatorioConfig, getIniciales } from "@/lib/sanatorio-config-context";
 import { motion } from "framer-motion";
-
-interface RateLimitInfo {
-  message: string;
-  resetAt: number;
-}
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
-  const [countdown, setCountdown] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const supabase = createClient();
   const { resolvedTheme, setTheme } = useTheme();
   const { config: sanatorio } = useSanatorioConfig();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
-  useEffect(() => {
-    if (!rateLimit) return;
-    const tick = () => {
-      const diff = Math.max(0, rateLimit.resetAt - Date.now());
-      setCountdown(Math.ceil(diff / 1000));
-      if (diff <= 0) {
-        setRateLimit(null);
-        setError("");
-      }
-    };
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [rateLimit]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setRateLimit(null);
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (res.status === 429) {
-        const resetHeader = res.headers.get("X-RateLimit-Reset");
-        const retryAfter = res.headers.get("Retry-After");
-        const resetAt = resetHeader
-          ? Number(resetHeader)
-          : Date.now() + Number(retryAfter ?? 60) * 1000;
-        setRateLimit({
-          message: "Demasiados intentos. Esperá unos minutos antes de volver a intentar.",
-          resetAt,
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(data.error ?? "No se pudo iniciar sesión");
-        setLoading(false);
-        return;
-      }
-
-      router.push("/dashboard");
-      router.refresh();
-    } catch (err) {
-      console.error("[login] fetch error:", err);
-      setError("Error de red. Verificá tu conexión.");
+    if (authError) {
+      setError("Email o contraseña incorrectos");
       setLoading(false);
+      return;
     }
+
+    router.push("/dashboard");
+    router.refresh();
   };
 
   const isDark = mounted && resolvedTheme === "dark";
   const logoIsExternal =
     sanatorio.logo_url?.startsWith("http") ||
     sanatorio.logo_url?.startsWith("https");
-
-  const formatCountdown = (s: number) => {
-    if (s <= 0) return "0s";
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
@@ -160,17 +109,7 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {rateLimit ? (
-                <Alert variant="destructive">
-                  <Hourglass size={16} className="animate-pulse" />
-                  <AlertDescription>
-                    <strong>{rateLimit.message}</strong>
-                    <span className="block mt-1 text-xs font-mono">
-                      Reintentá en {formatCountdown(countdown)}
-                    </span>
-                  </AlertDescription>
-                </Alert>
-              ) : error ? (
+              {error ? (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -188,7 +127,6 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoFocus
-                    disabled={Boolean(rateLimit)}
                   />
                 </div>
               </div>
@@ -204,7 +142,6 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    disabled={Boolean(rateLimit)}
                   />
                 </div>
               </div>
@@ -212,7 +149,7 @@ export default function LoginPage() {
                 type="submit"
                 className="w-full"
                 size="lg"
-                disabled={loading || Boolean(rateLimit)}
+                disabled={loading}
               >
                 {loading ? "Ingresando..." : "Iniciar Sesión"}
               </Button>

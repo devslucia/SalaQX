@@ -8,11 +8,9 @@ export async function middleware(request: NextRequest) {
   // Rate-limit API general por IP.
   // Excluimos:
   //   - /api/cron/*  → autenticado con Bearer, no es tráfico de usuario
-  //   - /api/auth/*  → tienen su propio rate-limit (loginRatelimit)
   if (
     pathname.startsWith("/api/") &&
-    !pathname.startsWith("/api/cron/") &&
-    !pathname.startsWith("/api/auth/")
+    !pathname.startsWith("/api/cron/")
   ) {
     const ip = getClientIp(request);
     const limited = await applyRateLimit(apiRatelimit, `api:${ip}`);

@@ -47,12 +47,6 @@ function buildLimiter(
   });
 }
 
-// Login: 5 intentos cada 15 minutos por IP
-export const loginRatelimit = buildLimiter(
-  "ratelimit:login",
-  Ratelimit.slidingWindow(5, "15 m"),
-);
-
 // API general: 60 requests por minuto por IP
 export const apiRatelimit = buildLimiter(
   "ratelimit:api",
