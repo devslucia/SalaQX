@@ -108,8 +108,22 @@ export async function loadTurnoContext(turnoId: string): Promise<TurnoContext | 
     .single();
   if (error || !turno) return null;
 
+  // Para médicos externos (medico_id = null), usar datos del turno
+  const medicoPromise = turno.medico_id
+    ? supabase.from("users").select("id, nombre, email, telefono").eq("id", turno.medico_id).maybeSingle()
+    : Promise.resolve({
+        data: turno.medico_nombre
+          ? {
+              id: "externo",
+              nombre: turno.medico_nombre,
+              email: turno.medico_email ?? "",
+              telefono: turno.medico_celular ?? null,
+            }
+          : null,
+      });
+
   const [medicoRes, quirofanoRes, osRes, taRes] = await Promise.all([
-    supabase.from("users").select("id, nombre, email, telefono").eq("id", turno.medico_id).maybeSingle(),
+    medicoPromise,
     turno.quirofano_id
       ? supabase.from("quirofanos").select("id, nombre").eq("id", turno.quirofano_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -653,5 +667,42 @@ export async function sendReprogramacionRechazada(
       sanatorio,
     }),
     log: { turnoId, destinatarioId: ctx.medico.id, tipo: "reprogramacion_rechazada" },
+  });
+}
+
+/**
+ * Envía email de confirmación a un médico externo (sin cuenta en el sistema).
+ * Usado cuando la encargada/admin carga un turno manualmente.
+ */
+export async function sendTurnoConfirmadoExterno(
+  turnoId: string,
+  params: {
+    medico_nombre: string;
+    medico_email: string;
+    cargado_por_nombre: string;
+  },
+): Promise<SendResult> {
+  const [ctx, sanatorio] = await Promise.all([
+    loadTurnoContext(turnoId),
+    loadSanatorioConfig(),
+  ]);
+  if (!ctx) return { ok: false, error: "turno not found" };
+
+  const turnoUrl = `${APP_URL}/turnos/${turnoId}`;
+
+  return sendOne({
+    to: params.medico_email,
+    subject: `Turno confirmado en ${sanatorio.nombre} — ${formatFechaCortaArg(ctx.turno.fecha_hora)}`,
+    react: TurnoConfirmadoEmail({
+      destinatarioNombre: params.medico_nombre,
+      paciente: ctx.turno,
+      tipoCirugia: ctx.turno.tipo_cirugia,
+      fechaHora: ctx.turno.fecha_hora,
+      quirofano: ctx.quirofano,
+      duracion: formatDuracion(ctx.turno.duracion_minutos),
+      turnoUrl,
+      sanatorio,
+    }),
+    log: { turnoId, destinatarioId: null, tipo: "confirmacion" },
   });
 }

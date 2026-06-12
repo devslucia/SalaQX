@@ -75,18 +75,34 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
   const fetchTurno = async () => {
     const { data } = await supabase.from("turnos").select("*").eq("id", id).single();
     if (data) {
-      const [medicoRes, osRes, taRes, qRes] = await Promise.all([
-        supabase.from("users").select("nombre,telefono").eq("id", data.medico_id).single(),
+      const [osRes, taRes, qRes] = await Promise.all([
         supabase.from("obras_sociales").select("nombre").eq("id", data.obra_social_id).single(),
         supabase.from("tipos_anestesia").select("nombre").eq("id", data.tipo_anestesia_id).single(),
         data.quirofano_id
           ? supabase.from("quirofanos").select("nombre").eq("id", data.quirofano_id).single()
           : { data: null },
       ]);
+
+      // Para médicos externos (medico_id = null), usar datos del turno
+      let medicoNombre = "—";
+      let medicoTelefono = null;
+      if (data.medico_id) {
+        const { data: medicoData } = await supabase
+          .from("users")
+          .select("nombre,telefono")
+          .eq("id", data.medico_id)
+          .single();
+        medicoNombre = medicoData?.nombre || "—";
+        medicoTelefono = medicoData?.telefono;
+      } else if (data.medico_nombre) {
+        medicoNombre = data.medico_nombre;
+        medicoTelefono = data.medico_celular;
+      }
+
       setTurno({
         ...data,
-        medico_nombre: medicoRes.data?.nombre || "—",
-        medico_telefono: medicoRes.data?.telefono,
+        medico_nombre: medicoNombre,
+        medico_telefono: medicoTelefono,
         obra_social: osRes.data,
         tipo_anestesia: taRes.data,
         quirofano: qRes.data,
@@ -648,6 +664,17 @@ export default function TurnoDetailPage({ params }: { params: Promise<{ id: stri
           <CardContent className="space-y-2.5 text-sm">
             <Field label="Nombre" value={turno.medico_nombre || "—"} />
             <Field label="Teléfono" value={turno.medico_telefono || "—"} />
+            {turno.medico_email && (
+              <Field label="Email" value={turno.medico_email} />
+            )}
+            {turno.cargado_por_rol && turno.cargado_por_rol !== "medico" && (
+              <div className="pt-2 mt-2 border-t border-dashed">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-violet-600 dark:text-violet-400">Cargado manualmente</span>
+                  {" "}por {turno.cargado_por_rol === "admin" ? "un administrador" : "la encargada"}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

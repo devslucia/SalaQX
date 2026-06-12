@@ -64,9 +64,11 @@ export interface ObraSocial {
   activo: boolean;
 }
 
+export type CargadoPorRol = "medico" | "encargada" | "admin";
+
 export interface Turno {
   id: string;
-  medico_id: string;
+  medico_id: string | null;
   quirofano_id: string | null;
   paciente_nombre: string;
   paciente_dni: string;
@@ -74,8 +76,11 @@ export interface Turno {
   obra_social_id: string;
   tipo_cirugia: string;
   tipo_anestesia_id: string;
-  medico_nombre?: string;
+  medico_nombre?: string | null;
+  medico_email?: string | null;
+  medico_celular?: string | null;
   medico_telefono?: string;
+  cargado_por_rol?: CargadoPorRol | null;
   usa_idi: boolean;
   pasa_uti: boolean;
   duracion_minutos: number;
@@ -170,8 +175,11 @@ export interface TurnoCalendarEvent {
   tipo_cirugia: string;
   estado: EstadoTurno;
   paciente_nombre: string | null;
-  medico_id: string;
+  medico_id: string | null;
   medico_nombre: string | null;
+  medico_email?: string | null;
+  medico_celular?: string | null;
+  cargado_por_rol?: CargadoPorRol | null;
   quirofano_id: string | null;
   quirofano_nombre: string | null;
   quirofano_color: string | null;

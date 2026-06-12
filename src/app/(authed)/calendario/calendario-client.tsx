@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify-client";
@@ -29,6 +29,7 @@ import {
   type EstadoTurno, DIAS_SEMANA,
 } from "@/lib/types";
 import { SolicitarTurnoForm } from "@/components/solicitar-turno-form";
+import { CargarTurnoManualForm } from "@/components/cargar-turno-manual-form";
 import { ESTADO_BADGE_COLORS, ESTADO_LABELS } from "@/lib/calendar";
 import { isBefore, isSameDay, startOfDay } from "date-fns";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -91,6 +92,7 @@ export function CalendarioClient() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cargarTurnoOpen, setCargarTurnoOpen] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -370,7 +372,16 @@ export function CalendarioClient() {
           </div>
         </div>
 
-        <div className="relative sm:shrink-0">
+        <div className="relative sm:shrink-0 flex items-center gap-2">
+          {user.rol !== "medico" && (
+            <Button
+              onClick={() => setCargarTurnoOpen(true)}
+              className="gap-2"
+            >
+              <CalendarDays size={16} />
+              Cargar Turno
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setFilterOpen((o) => !o)}
@@ -611,6 +622,25 @@ export function CalendarioClient() {
         variant="danger"
         onConfirm={handleDelete}
       />
+
+      {/* Dialog para carga manual de turno */}
+      <Dialog open={cargarTurnoOpen} onOpenChange={setCargarTurnoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cargar Turno Manual</DialogTitle>
+            <DialogDescription>
+              El turno quedará confirmado directamente con quirófano asignado
+            </DialogDescription>
+          </DialogHeader>
+          <CargarTurnoManualForm
+            onSuccess={() => {
+              setCargarTurnoOpen(false);
+              refreshTurnos();
+            }}
+            onCancel={() => setCargarTurnoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -642,7 +672,7 @@ function DetailContent({ detail, user }: { detail: any; user: any }) {
       <Row label="Paciente" value={detail.paciente_nombre} />
       <Row label="DNI" value={detail.paciente_dni} />
       <Row label="Tipo de cirugía" value={detail.tipo_cirugia} />
-      <Row label="Médico" value={detail.users?.nombre || "—"} />
+      <Row label="Médico" value={detail.users?.nombre || detail.medico_nombre || "—"} />
       <Row label="Quirófano" value={detail.quirofanos?.nombre || "—"} />
       <Row label="Anestesia" value={detail.tipos_anestesia?.nombre || "—"} />
       <Row label="Obra Social" value={detail.obras_sociales?.nombre || "—"} />

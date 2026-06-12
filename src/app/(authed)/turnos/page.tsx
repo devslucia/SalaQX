@@ -17,12 +17,14 @@ import {
   type EstadoTurno,
 } from "@/lib/types";
 import { formatDateTime, cn } from "@/lib/utils";
-import { Calendar, Filter, Search, User, Building2, CalendarPlus, SearchX, Inbox } from "lucide-react";
+import { Calendar, Filter, Search, User, Building2, CalendarPlus, SearchX, Inbox, Plus } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusIcons } from "@/components/empty-state";
 import { motion } from "framer-motion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CargarTurnoManualForm } from "@/components/cargar-turno-manual-form";
 
 const estadoVariant: Record<EstadoTurno, "default" | "success" | "destructive" | "warning" | "secondary"> = {
   pendiente: "warning",
@@ -52,6 +54,7 @@ export default function TurnosPage() {
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [busqueda, setBusqueda] = useState("");
+  const [cargarTurnoOpen, setCargarTurnoOpen] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -70,18 +73,34 @@ export default function TurnosPage() {
       if (data) {
         const enriched = await Promise.all(
           data.map(async (t: any) => {
-            const [medicoRes, osRes, taRes, qRes] = await Promise.all([
-              supabase.from("users").select("nombre,telefono").eq("id", t.medico_id).single(),
+            const [osRes, taRes, qRes] = await Promise.all([
               supabase.from("obras_sociales").select("nombre").eq("id", t.obra_social_id).single(),
               supabase.from("tipos_anestesia").select("nombre").eq("id", t.tipo_anestesia_id).single(),
               t.quirofano_id
                 ? supabase.from("quirofanos").select("nombre").eq("id", t.quirofano_id).single()
                 : { data: null },
             ]);
+
+            // Para médicos externos (medico_id = null), usar datos del turno
+            let medicoNombre = "—";
+            let medicoTelefono = null;
+            if (t.medico_id) {
+              const { data: medicoData } = await supabase
+                .from("users")
+                .select("nombre,telefono")
+                .eq("id", t.medico_id)
+                .single();
+              medicoNombre = medicoData?.nombre || "—";
+              medicoTelefono = medicoData?.telefono;
+            } else if (t.medico_nombre) {
+              medicoNombre = t.medico_nombre;
+              medicoTelefono = t.medico_celular;
+            }
+
             return {
               ...t,
-              medico_nombre: medicoRes.data?.nombre || "—",
-              medico_telefono: medicoRes.data?.telefono,
+              medico_nombre: medicoNombre,
+              medico_telefono: medicoTelefono,
               obra_social: osRes.data,
               tipo_anestesia: taRes.data,
               quirofano: qRes.data,
@@ -119,14 +138,22 @@ export default function TurnosPage() {
         title="Turnos"
         description={user?.rol === "medico" ? "Tus cirugías programadas" : "Todas las cirugías del sistema"}
         actions={
-          user?.rol === "medico" ? (
-            <Link href="/solicitar-turno">
-              <Button size="lg">
-                <CalendarPlus size={16} />
-                Solicitar Turno
+          <div className="flex items-center gap-2">
+            {isReviewer && (
+              <Button size="lg" onClick={() => setCargarTurnoOpen(true)}>
+                <Plus size={16} />
+                Cargar Turno
               </Button>
-            </Link>
-          ) : undefined
+            )}
+            {user?.rol === "medico" && (
+              <Link href="/solicitar-turno">
+                <Button size="lg">
+                  <CalendarPlus size={16} />
+                  Solicitar Turno
+                </Button>
+              </Link>
+            )}
+          </div>
         }
       />
 
@@ -261,12 +288,19 @@ export default function TurnosPage() {
                         <span className="text-xs text-muted-foreground">
                           {formatDateTime(t.fecha_hora)}
                         </span>
-                        <Badge
-                          variant={estadoVariant[t.estado]}
-                          className={cn("border", estadoBadgeClass[t.estado])}
-                        >
-                          {ESTADO_LABELS[t.estado] ?? t.estado}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {t.cargado_por_rol && t.cargado_por_rol !== "medico" && (
+                            <Badge variant="secondary" className="text-[10px] bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/30">
+                              Manual
+                            </Badge>
+                          )}
+                          <Badge
+                            variant={estadoVariant[t.estado]}
+                            className={cn("border", estadoBadgeClass[t.estado])}
+                          >
+                            {ESTADO_LABELS[t.estado] ?? t.estado}
+                          </Badge>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -276,6 +310,26 @@ export default function TurnosPage() {
           })}
         </div>
       )}
+
+      {/* Dialog para carga manual de turno */}
+      <Dialog open={cargarTurnoOpen} onOpenChange={setCargarTurnoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cargar Turno Manual</DialogTitle>
+            <DialogDescription>
+              El turno quedará confirmado directamente con quirófano asignado
+            </DialogDescription>
+          </DialogHeader>
+          <CargarTurnoManualForm
+            onSuccess={() => {
+              setCargarTurnoOpen(false);
+              // Recargar turnos
+              window.location.reload();
+            }}
+            onCancel={() => setCargarTurnoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
