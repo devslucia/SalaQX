@@ -31,7 +31,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  const isPublicApi = pathname.startsWith("/api/cron/");
+  const isPublicApi = pathname.startsWith("/api/");
 
   if (!user && !isPublicApi && pathname !== "/login") {
     const url = request.nextUrl.clone();

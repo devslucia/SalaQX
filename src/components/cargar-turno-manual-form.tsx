@@ -10,9 +10,10 @@ import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Calendar } from "@/components/ui/calendar";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Stethoscope, Clock, AlertTriangle, Info, Building2,
-  Phone, Mail, CheckCircle2, XCircle,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -55,11 +56,6 @@ export function CargarTurnoManualForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Disponibilidad por quirófano para el slot seleccionado
-  const [disponibilidadQuirofano, setDisponibilidadQuirofano] = useState<
-    Map<string, boolean>
-  >(new Map());
-
   const [form, setForm] = useState({
     paciente_nombre: "",
     paciente_dni: "",
@@ -73,26 +69,23 @@ export function CargarTurnoManualForm({
     duracion_minutos: "0",
     fecha: initialDate || "",
     hora: initialTime || "",
-    // Médico externo
     medico_nombre: "",
     medico_email: "",
     medico_celular: "",
-    // Quirófano
     quirofano_id: "",
   });
 
+  // 1. Fetch initial data (obras, anestesia, configUTI, quirofanos — NO horarios)
   useEffect(() => {
     const fetchData = async () => {
-      const [os, ta, h, uti, q] = await Promise.all([
+      const [os, ta, uti, q] = await Promise.all([
         supabase.from("obras_sociales").select("*").eq("activo", true).order("nombre"),
         supabase.from("tipos_anestesia").select("*").eq("activo", true).order("nombre"),
-        supabase.from("horarios_habilitados").select("*"),
         supabase.from("config_uti").select("*").order("updated_at", { ascending: false }).limit(1).single(),
         supabase.from("quirofanos").select("*").eq("activo", true).order("nombre"),
       ]);
       if (os.data) setObrasSociales(os.data);
       if (ta.data) setTiposAnestesia(ta.data);
-      if (h.data) setHorarios(h.data);
       if (uti.data) setConfigUTI(uti.data);
       if (q.data) setQuirofanos(q.data);
       setLoading(false);
@@ -100,132 +93,27 @@ export function CargarTurnoManualForm({
     fetchData();
   }, []);
 
-  const slotsOcupadosPorQuirofano = (
-    turnos: TurnoOcupado[],
-    quirofanoId: string,
-  ): { inicio: Date; fin: Date }[] =>
-    turnos
-      .filter((t) => t.quirofano_id === quirofanoId)
-      .map((t) => ({
-        inicio: new Date(t.fecha_hora),
-        fin: new Date(new Date(t.fecha_hora).getTime() + t.duracion_minutos * 60_000),
-      }));
-
-  const overlaps = (
-    aInicio: Date,
-    aFin: Date,
-    bInicio: Date,
-    bFin: Date,
-  ): boolean => aInicio < bFin && aFin > bInicio;
-
-  type SlotInfo = {
-    hora: string;
-    inicio: Date;
-    fin: Date;
-    disponible: boolean;
-    quirofanosLibres: number;
-    quirofanosTotales: number;
-  };
-
-  const getSlots = (dateStr: string, duracionMin: number): SlotInfo[] => {
-    if (!dateStr || duracionMin <= 0) return [];
-    const date = parseISO(dateStr);
-    const dayOfWeek = getDay(date) as DiaSemana;
-
-    const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
-    if (applicableHorarios.length === 0) return [];
-
-    const quirofanosActivosIds = new Set(quirofanos.map((q) => q.id));
-    const quirofanosConHorarioEseDia = new Map<string, HorarioHabilitado>();
-    for (const h of applicableHorarios) {
-      if (
-        quirofanosActivosIds.has(h.quirofano_id) &&
-        !quirofanosConHorarioEseDia.has(h.quirofano_id)
-      ) {
-        quirofanosConHorarioEseDia.set(h.quirofano_id, h);
-      }
-    }
-    const quirofanosTotales = quirofanosConHorarioEseDia.size;
-    if (quirofanosTotales === 0) return [];
-
-    const slotsMap = new Map<string, SlotInfo>();
-    for (const h of quirofanosConHorarioEseDia.values()) {
-      const [startH, startM] = h.hora_inicio.split(":").map(Number);
-      const [endH, endM] = h.hora_fin.split(":").map(Number);
-      let current = startH * 60 + startM;
-      const end = endH * 60 + endM;
-      while (current + duracionMin <= end) {
-        const hh = String(Math.floor(current / 60)).padStart(2, "0");
-        const mm = String(current % 60).padStart(2, "0");
-        const hora = `${hh}:${mm}`;
-        if (!slotsMap.has(hora)) {
-          const slotInicio = new Date(date);
-          slotInicio.setHours(Math.floor(current / 60), current % 60, 0, 0);
-          const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
-          slotsMap.set(hora, {
-            hora,
-            inicio: slotInicio,
-            fin: slotFin,
-            disponible: false,
-            quirofanosLibres: 0,
-            quirofanosTotales,
-          });
-        }
-        current += 30;
-      }
-    }
-
-    for (const slot of slotsMap.values()) {
-      const libres = Array.from(quirofanosConHorarioEseDia.keys()).filter(
-        (qId) =>
-          !slotsOcupadosPorQuirofano(turnosDelDia, qId).some((b) =>
-            overlaps(slot.inicio, slot.fin, b.inicio, b.fin),
-          ),
-      ).length;
-      slot.quirofanosLibres = libres;
-      slot.disponible = libres > 0;
-    }
-
-    return Array.from(slotsMap.values()).sort((a, b) =>
-      a.hora.localeCompare(b.hora),
-    );
-  };
-
-  // Calcular disponibilidad por quirófano cuando cambia fecha/hora/duración
+  // 2. Fetch horarios POR QUIRÓFANO cuando se selecciona uno
   useEffect(() => {
-    if (!form.fecha || !form.hora) {
-      setDisponibilidadQuirofano(new Map());
+    if (!form.quirofano_id) {
+      setHorarios([]);
       return;
     }
+    let cancelled = false;
+    const fetchHorarios = async () => {
+      const { data } = await supabase
+        .from("horarios_habilitados")
+        .select("*")
+        .eq("quirofano_id", form.quirofano_id);
+      if (!cancelled && data) setHorarios(data);
+    };
+    fetchHorarios();
+    return () => { cancelled = true; };
+  }, [form.quirofano_id, supabase]);
 
-    const duracionMin = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
-    if (duracionMin <= 0) {
-      setDisponibilidadQuirofano(new Map());
-      return;
-    }
-
-    const date = parseISO(form.fecha);
-    const dayOfWeek = getDay(date) as DiaSemana;
-    const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
-
-    const [startH, startM] = form.hora.split(":").map(Number);
-    const slotInicio = new Date(date);
-    slotInicio.setHours(startH, startM, 0, 0);
-    const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
-
-    const newDisponibilidad = new Map<string, boolean>();
-    for (const h of applicableHorarios) {
-      if (!quirofanos.some((q) => q.id === h.quirofano_id)) continue;
-      const ocupado = slotsOcupadosPorQuirofano(turnosDelDia, h.quirofano_id).some((b) =>
-        overlaps(slotInicio, slotFin, b.inicio, b.fin)
-      );
-      newDisponibilidad.set(h.quirofano_id, !ocupado);
-    }
-    setDisponibilidadQuirofano(newDisponibilidad);
-  }, [form.fecha, form.hora, form.duracion_horas, form.duracion_minutos, turnosDelDia, horarios, quirofanos]);
-
+  // 3. Fetch turnos del día FILTRADOS POR QUIRÓFANO
   useEffect(() => {
-    if (!form.fecha) {
+    if (!form.fecha || !form.quirofano_id) {
       setTurnosDelDia([]);
       return;
     }
@@ -237,6 +125,7 @@ export function CargarTurnoManualForm({
       const { data, error: qErr } = await supabase
         .from("turnos")
         .select("id, fecha_hora, duracion_minutos, quirofano_id, estado")
+        .eq("quirofano_id", form.quirofano_id)
         .in("estado", ["confirmada", "pendiente", "solicitud_reprogramacion"])
         .gte("fecha_hora", inicio.toISOString())
         .lte("fecha_hora", fin.toISOString());
@@ -250,11 +139,59 @@ export function CargarTurnoManualForm({
       setSlotsLoading(false);
     };
     fetchTurnosDelDia();
-    return () => {
-      cancelled = true;
-    };
-  }, [form.fecha, supabase]);
+    return () => { cancelled = true; };
+  }, [form.fecha, form.quirofano_id, supabase]);
 
+  // Slot computation helpers
+  const overlaps = (
+    aInicio: Date, aFin: Date,
+    bInicio: Date, bFin: Date,
+  ): boolean => aInicio < bFin && aFin > bInicio;
+
+  type SlotInfo = {
+    hora: string;
+    inicio: Date;
+    fin: Date;
+    disponible: boolean;
+  };
+
+  const getSlots = (dateStr: string, duracionMin: number): SlotInfo[] => {
+    if (!dateStr || duracionMin <= 0 || !form.quirofano_id) return [];
+    const date = parseISO(dateStr);
+    const dayOfWeek = getDay(date) as DiaSemana;
+
+    // horarios already filtered by quirófano
+    const applicableHorarios = horarios.filter((h) => h.dia === dayOfWeek);
+    if (applicableHorarios.length === 0) return [];
+
+    const horario = applicableHorarios[0];
+    const [startH, startM] = horario.hora_inicio.split(":").map(Number);
+    const [endH, endM] = horario.hora_fin.split(":").map(Number);
+    let current = startH * 60 + startM;
+    const end = endH * 60 + endM;
+
+    const slots: SlotInfo[] = [];
+    while (current + duracionMin <= end) {
+      const hh = String(Math.floor(current / 60)).padStart(2, "0");
+      const mm = String(current % 60).padStart(2, "0");
+      const hora = `${hh}:${mm}`;
+      const slotInicio = new Date(date);
+      slotInicio.setHours(Math.floor(current / 60), current % 60, 0, 0);
+      const slotFin = new Date(slotInicio.getTime() + duracionMin * 60_000);
+
+      const ocupado = turnosDelDia.some((t) => {
+        const tIni = new Date(t.fecha_hora);
+        const tFin = new Date(tIni.getTime() + t.duracion_minutos * 60_000);
+        return overlaps(slotInicio, slotFin, tIni, tFin);
+      });
+
+      slots.push({ hora, inicio: slotInicio, fin: slotFin, disponible: !ocupado });
+      current += 30;
+    }
+    return slots;
+  };
+
+  // 4. Validate slot when duration changes
   useEffect(() => {
     if (!form.fecha || !form.hora) {
       setSlotInvalidoPorDuracion(false);
@@ -275,8 +212,9 @@ export function CargarTurnoManualForm({
       setSlotInvalidoPorDuracion(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.duracion_horas, form.duracion_minutos, form.fecha, turnosDelDia, quirofanos]);
+  }, [form.duracion_horas, form.duracion_minutos, form.fecha, turnosDelDia, horarios]);
 
+  // Date validation helpers
   const isUTIDayAllowed = (dateStr: string): boolean => {
     if (!form.pasa_uti || !configUTI) return true;
     const date = parseISO(dateStr);
@@ -307,72 +245,40 @@ export function CargarTurnoManualForm({
   const getDayTooltip = (date: Date): string | undefined => {
     const reason = getDayDisabledReason(date);
     if (reason === "pasado") return "No se pueden cargar turnos en días pasados";
-    if (reason === "no-habilitado")
-      return "No hay turnos disponibles este día";
-    if (reason === "uti")
-      return "Pacientes con UTI solo pueden programarse los días habilitados para UTI";
+    if (reason === "no-habilitado") return "Este quirófano no tiene horario este día";
+    if (reason === "uti") return "Pacientes con UTI solo pueden programarse los días habilitados para UTI";
     return undefined;
   };
 
+  // Handle quirófano change — clear fecha and hora
+  const handleQuirofanoChange = (id: string) => {
+    setForm({ ...form, quirofano_id: id, fecha: "", hora: "" });
+  };
+
+  // Submit handler with NetworkError handling
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    // Validaciones
-    if (!form.paciente_nombre || !form.paciente_dni || !form.paciente_edad || !form.obra_social_id || !form.tipo_cirugia || !form.tipo_anestesia_id || !form.fecha || !form.hora) {
+    if (!form.medico_nombre.trim()) { setError("El nombre del médico responsable es obligatorio"); return; }
+    if (!form.medico_email.trim()) { setError("El email del médico responsable es obligatorio"); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.medico_email.trim())) { setError("El email del médico no tiene un formato válido"); return; }
+    if (!form.medico_celular.trim()) { setError("El celular del médico responsable es obligatorio"); return; }
+    if (!form.quirofano_id) { setError("Debe seleccionar un quirófano"); return; }
+    if (!form.fecha || !form.hora) { setError("Debe seleccionar fecha y hora"); return; }
+    if (!form.paciente_nombre || !form.paciente_dni || !form.paciente_edad || !form.obra_social_id || !form.tipo_cirugia || !form.tipo_anestesia_id) {
       setError("Todos los campos obligatorios deben estar completos");
       return;
     }
-
-    if (!form.medico_nombre.trim()) {
-      setError("El nombre del médico responsable es obligatorio");
-      return;
-    }
-
-    if (!form.medico_email.trim()) {
-      setError("El email del médico responsable es obligatorio");
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.medico_email.trim())) {
-      setError("El email del médico no tiene un formato válido");
-      return;
-    }
-
-    if (!form.medico_celular.trim()) {
-      setError("El celular del médico responsable es obligatorio");
-      return;
-    }
-
-    if (!form.quirofano_id) {
-      setError("Debe seleccionar un quirófano");
-      return;
-    }
-
     if (form.pasa_uti && !isUTIDayAllowed(form.fecha)) {
       setError("Los pacientes que van a UTI solo pueden operarse en los días configurados");
       return;
     }
-
     const duracionTotal = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
-    if (duracionTotal <= 0) {
-      setError("La duración debe ser mayor a 0");
-      return;
-    }
-
+    if (duracionTotal <= 0) { setError("La duración debe ser mayor a 0"); return; }
     const fechaHora = new Date(`${form.fecha}T${form.hora}:00`);
-    if (isBefore(fechaHora, startOfDay(new Date()))) {
-      setError("No se pueden cargar turnos en el pasado");
-      return;
-    }
-
-    // Verificar disponibilidad del quirófano seleccionado
-    const quirofanoDisponible = disponibilidadQuirofano.get(form.quirofano_id);
-    if (quirofanoDisponible === false) {
-      setError("Este quirófano ya tiene una cirugía en ese horario");
-      return;
-    }
+    if (isBefore(fechaHora, startOfDay(new Date()))) { setError("No se pueden cargar turnos en el pasado"); return; }
 
     setSubmitting(true);
     setError("");
@@ -407,20 +313,21 @@ export function CargarTurnoManualForm({
 
       if (!res.ok || !data.ok) {
         const msg = data.error || `Error ${res.status}`;
-        console.error("[CargarTurnoManualForm] api error:", msg);
         setError(msg);
         toast.error("Error al cargar el turno", { description: msg });
         return;
       }
 
-      console.log("[CargarTurnoManualForm] turno creado:", data.id);
       toast.success("¡Turno cargado y confirmado!", {
         description: "El turno quedó confirmado con quirófano asignado",
       });
       onSuccess?.();
     } catch (err) {
+      if (err instanceof TypeError && err.message.includes("NetworkError")) {
+        toast.error("Error de conexión. Verificá tu internet e intentá nuevamente.");
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[CargarTurnoManualForm] unexpected throw:", err);
       setError(message);
       toast.error("Error inesperado", { description: message });
     } finally {
@@ -440,7 +347,9 @@ export function CargarTurnoManualForm({
   }
 
   const duracionTotal = parseInt(form.duracion_horas) * 60 + parseInt(form.duracion_minutos);
-  const slotsDelDia = form.fecha && duracionTotal > 0 ? getSlots(form.fecha, duracionTotal) : [];
+  const slotsDelDia = form.fecha && form.quirofano_id && duracionTotal > 0
+    ? getSlots(form.fecha, duracionTotal)
+    : [];
   const fechaInvalida = form.fecha && !isUTIDayAllowed(form.fecha) && form.pasa_uti;
 
   return (
@@ -452,7 +361,171 @@ export function CargarTurnoManualForm({
         </Alert>
       )}
 
-      {/* Datos del médico externo */}
+      {/* Quirófano — PRIMER CAMPO DESTACADO */}
+      <Card className="ring-1 ring-primary/10">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10 text-warning">
+              <Building2 size={16} />
+            </div>
+            Quirófano *
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {quirofanos.map((q) => {
+              const isSelected = form.quirofano_id === q.id;
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => handleQuirofanoChange(q.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3 text-left transition-all",
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "hover:bg-muted/50",
+                  )}
+                >
+                  <div
+                    className="h-4 w-4 rounded-full shrink-0"
+                    style={{ backgroundColor: q.color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{q.nombre}</p>
+                  </div>
+                  {isSelected && (
+                    <CheckCircle2 size={16} className="text-primary shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fecha y Hora — habilitado solo tras seleccionar quirófano */}
+      <AnimatePresence mode="wait">
+        {form.quirofano_id && (
+          <motion.div
+            key="fecha-hora"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
+                    <Clock size={16} />
+                  </div>
+                  Fecha y Hora
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Calendar */}
+                  <div className="space-y-2">
+                    <Label>Fecha *</Label>
+                    <div className="rounded-lg border border-input bg-background p-1 dark:bg-[#0D1117]">
+                      <Calendar
+                        mode="single"
+                        selected={form.fecha ? parseISO(form.fecha) : undefined}
+                        onSelect={(d) => {
+                          if (!d) return;
+                          setForm({
+                            ...form,
+                            fecha: format(d, "yyyy-MM-dd"),
+                            hora: "",
+                          });
+                        }}
+                        disabled={isDayDisabled}
+                        startMonth={new Date()}
+                        components={{
+                          DayButton: ({ day, ...buttonProps }) => {
+                            const tooltip = getDayTooltip(day.date);
+                            return (
+                              <button
+                                type="button"
+                                {...buttonProps}
+                                title={tooltip ?? buttonProps.title}
+                                aria-label={tooltip ?? buttonProps["aria-label"]}
+                              />
+                            );
+                          },
+                        }}
+                      />
+                    </div>
+                    {fechaInvalida && (
+                      <p className="text-xs text-destructive mt-1">
+                        Los pacientes con UTI solo pueden operarse en días habilitados
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Slots */}
+                  <div className="space-y-2">
+                    <Label>Horario disponible *</Label>
+                    {!form.fecha ? (
+                      <div className="flex items-center justify-center h-20 text-sm text-muted-foreground">
+                        <Info size={14} className="mr-2" />
+                        Seleccioná una fecha para ver los horarios
+                      </div>
+                    ) : slotsLoading ? (
+                      <div className="flex items-center justify-center h-20">
+                        <div className="spinner" />
+                      </div>
+                    ) : slotsDelDia.length === 0 ? (
+                      <div className="flex items-center justify-center h-20 text-sm text-muted-foreground">
+                        No hay horarios disponibles para esta fecha
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                        {slotsDelDia.map((slot) => (
+                          <button
+                            key={slot.hora}
+                            type="button"
+                            disabled={!slot.disponible}
+                            onClick={() => setForm({ ...form, hora: slot.hora })}
+                            className={cn(
+                              "rounded-lg border px-2 py-2 text-sm font-medium transition-all",
+                              slot.hora === form.hora
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : slot.disponible
+                                  ? "border-border hover:border-primary/50 hover:bg-primary/5"
+                                  : "border-border bg-muted/30 text-muted-foreground cursor-not-allowed opacity-50",
+                            )}
+                          >
+                            {slot.hora}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {slotInvalidoPorDuracion && (
+                      <p className="text-xs text-destructive">
+                        El horario seleccionado ya no está disponible con esta duración
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mensaje orientativo cuando no hay quirófano */}
+      {!form.quirofano_id && (
+        <div className="rounded-lg border border-dashed p-4 text-center">
+          <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+            <Info size={14} />
+            Elegí un quirófano para habilitar la selección de fecha y horario
+          </p>
+        </div>
+      )}
+
+      {/* Médico Responsable */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -676,174 +749,6 @@ export function CargarTurnoManualForm({
         </CardContent>
       </Card>
 
-      {/* Quirófano */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10 text-warning">
-              <Building2 size={16} />
-            </div>
-            Quirófano *
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {quirofanos.map((q) => {
-              const disponible = disponibilidadQuirofano.get(q.id);
-              const isSelected = form.quirofano_id === q.id;
-              return (
-                <button
-                  key={q.id}
-                  type="button"
-                  onClick={() => setForm({ ...form, quirofano_id: q.id })}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg border p-3 text-left transition-all",
-                    isSelected
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "hover:bg-muted/50",
-                  )}
-                >
-                  <div
-                    className="h-4 w-4 rounded-full shrink-0"
-                    style={{ backgroundColor: q.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{q.nombre}</p>
-                    {form.fecha && form.hora && disponible !== undefined && (
-                      <p className={cn(
-                        "text-xs",
-                        disponible ? "text-success" : "text-destructive"
-                      )}>
-                        {disponible ? (
-                          <span className="flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Libre
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <XCircle size={12} /> Ocupado
-                          </span>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                  {isSelected && (
-                    <CheckCircle2 size={16} className="text-primary shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          {form.quirofano_id && disponibilidadQuirofano.get(form.quirofano_id) === false && (
-            <Alert variant="destructive">
-              <XCircle size={16} />
-              <AlertDescription>
-                Este quirófano ya tiene una cirugía en ese horario
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Fecha y hora */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
-              <Clock size={16} />
-            </div>
-            Fecha y Hora
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Fecha *</Label>
-              <div className="rounded-lg border border-input bg-background p-1 dark:bg-[#0D1117]">
-                <Calendar
-                  mode="single"
-                  selected={form.fecha ? parseISO(form.fecha) : undefined}
-                  onSelect={(d) => {
-                    if (!d) return;
-                    setForm({
-                      ...form,
-                      fecha: format(d, "yyyy-MM-dd"),
-                      hora: "",
-                      quirofano_id: "",
-                    });
-                  }}
-                  disabled={isDayDisabled}
-                  startMonth={new Date()}
-                  components={{
-                    DayButton: ({ day, ...buttonProps }) => {
-                      const tooltip = getDayTooltip(day.date);
-                      return (
-                        <button
-                          type="button"
-                          {...buttonProps}
-                          title={tooltip ?? buttonProps.title}
-                          aria-label={tooltip ?? buttonProps["aria-label"]}
-                        />
-                      );
-                    },
-                  }}
-                />
-              </div>
-              {fechaInvalida && (
-                <p className="text-xs text-destructive mt-1">
-                  Los pacientes con UTI solo pueden operarse en días habilitados
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Horario disponible *</Label>
-              {slotsLoading ? (
-                <div className="flex items-center justify-center h-20">
-                  <div className="spinner" />
-                </div>
-              ) : slotsDelDia.length === 0 ? (
-                <div className="flex items-center justify-center h-20 text-sm text-muted-foreground">
-                  {form.fecha
-                    ? "No hay horarios disponibles para esta fecha"
-                    : "Seleccioná una fecha primero"}
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
-                  {slotsDelDia.map((slot) => (
-                    <button
-                      key={slot.hora}
-                      type="button"
-                      disabled={!slot.disponible}
-                      onClick={() => setForm({ ...form, hora: slot.hora })}
-                      className={cn(
-                        "rounded-lg border px-2 py-2 text-sm font-medium transition-all",
-                        slot.hora === form.hora
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : slot.disponible
-                            ? "border-border hover:border-primary/50 hover:bg-primary/5"
-                            : "border-border bg-muted/30 text-muted-foreground cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      {slot.hora}
-                      {slot.disponible && (
-                        <span className="block text-[10px] opacity-70">
-                          {slot.quirofanosLibres}/{slot.quirofanosTotales}Q
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {slotInvalidoPorDuracion && (
-                <p className="text-xs text-destructive">
-                  El horario seleccionado ya no está disponible con esta duración
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Botones de acción */}
       <div className="flex justify-end gap-3 pt-2">
         {onCancel && (
@@ -853,7 +758,7 @@ export function CargarTurnoManualForm({
         )}
         <Button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !form.quirofano_id || !form.fecha || !form.hora}
         >
           {submitting ? (
             <>
